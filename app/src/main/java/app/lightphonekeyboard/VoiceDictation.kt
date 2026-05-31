@@ -39,9 +39,14 @@ class VoiceDictation(private val context: Context) {
         }.start()
     }
 
+    /**
+     * Continuous dictation: a pause ends one *segment* (delivered via [onSegment]) but keeps listening,
+     * so a mid-sentence pause no longer stops you. Call [stop] when you're done; the trailing words
+     * since the last pause then arrive through [onSegment] too. [onPartial] is the live, in-progress text.
+     */
     fun listen(
         onPartial: (String) -> Unit,
-        onResult: (String) -> Unit,
+        onSegment: (String) -> Unit,
         onError: (String) -> Unit,
     ) {
         val m = model
@@ -51,13 +56,6 @@ class VoiceDictation(private val context: Context) {
             return
         }
         destroy()
-        var done = false
-        fun finish(text: String) {
-            if (done) return
-            done = true
-            if (text.isBlank()) onError("Didn't catch that.") else onResult(text)
-            destroy()
-        }
         try {
             val rec = Recognizer(m, SAMPLE_RATE)
             recognizer = rec
@@ -67,17 +65,30 @@ class VoiceDictation(private val context: Context) {
                 override fun onPartialResult(hypothesis: String?) {
                     field(hypothesis, "partial")?.let { if (it.isNotBlank()) onPartial(it) }
                 }
-                override fun onResult(hypothesis: String?) = finish(field(hypothesis, "text").orEmpty())
-                override fun onFinalResult(hypothesis: String?) = finish(field(hypothesis, "text").orEmpty())
-                override fun onError(e: Exception?) {
-                    if (!done) { done = true; onError("Voice error."); destroy() }
+                // A pause ends a segment but NOT the whole dictation — emit it and keep listening.
+                override fun onResult(hypothesis: String?) {
+                    field(hypothesis, "text")?.let { if (it.isNotBlank()) onSegment(it) }
                 }
-                override fun onTimeout() { if (!done) { done = true; destroy() } }
+                // Fires once when we stop(): the trailing words since the last pause.
+                override fun onFinalResult(hypothesis: String?) {
+                    field(hypothesis, "text")?.let { if (it.isNotBlank()) onSegment(it) }
+                }
+                override fun onError(e: Exception?) { onError("Voice error.") }
+                override fun onTimeout() {}
             })
         } catch (e: Throwable) {
             Log.e(TAG, "listen failed", e)
             onError("Voice error."); destroy()
         }
+    }
+
+    /** Finish dictating: flush the words since the last pause (via onSegment), then tear down. */
+    fun stop() {
+        val s = speech ?: return destroy()
+        runCatching { s.stop() }
+        // Give the final result a moment to arrive before closing the recognizer; skip if a new
+        // session has since replaced this one.
+        main.postDelayed({ if (speech === s) destroy() }, 350)
     }
 
     fun destroy() {

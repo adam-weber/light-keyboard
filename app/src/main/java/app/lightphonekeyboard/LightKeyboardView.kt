@@ -316,10 +316,31 @@ class LightKeyboardView @JvmOverloads constructor(
         d.setBounds(left, top, (left + size).toInt(), (top + size).toInt())
         d.draw(canvas)
         textPaint.textSize = spf(18)
-        val baseY = midY + dpf(22) - (textPaint.descent() + textPaint.ascent()) / 2f
-        canvas.drawText(listeningStatus, cx, baseY, textPaint)
+        // Wrap the live text so a long phrase stacks into lines instead of running off the screen.
+        drawWrappedCentered(canvas, listeningStatus, cx, midY + dpf(22), width - dpf(48), textPaint)
         textPaint.textSize = spf(12)
-        canvas.drawText("Tap to cancel", cx, height - dpf(18), textPaint)
+        canvas.drawText("Tap when done", cx, height - dpf(18), textPaint)
+    }
+
+    /** Draw [text] centered on ([cx],[centerY]), wrapping at word boundaries to fit [maxWidth]. */
+    private fun drawWrappedCentered(
+        canvas: Canvas, text: String, cx: Float, centerY: Float, maxWidth: Float, paint: Paint,
+    ) {
+        if (text.isEmpty()) return
+        val lines = ArrayList<String>()
+        var line = ""
+        for (word in text.split(' ')) {
+            val candidate = if (line.isEmpty()) word else "$line $word"
+            if (line.isEmpty() || paint.measureText(candidate) <= maxWidth) {
+                line = candidate
+            } else {
+                lines.add(line); line = word
+            }
+        }
+        if (line.isNotEmpty()) lines.add(line)
+        val lineH = paint.descent() - paint.ascent()
+        var baseline = centerY - lines.size * lineH / 2f - paint.ascent()
+        for (l in lines) { canvas.drawText(l, cx, baseline, paint); baseline += lineH }
     }
 
     private fun drawKey(canvas: Canvas, pk: PlacedKey) {

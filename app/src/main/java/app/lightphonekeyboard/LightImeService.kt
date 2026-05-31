@@ -228,11 +228,10 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         if (dictation.ready) {
             dictation.listen(
                 onPartial = { kb.setListeningStatus(it) },
-                onResult = { text ->
-                    micActive = false
+                // Each finished segment commits to the field; dictation keeps going across pauses.
+                onSegment = { text ->
                     clearUndo()
                     currentInputConnection?.commitText(spacedDictation(text), 1)
-                    kb.stopListeningUi()
                 },
                 onError = { msg ->
                     micActive = false
@@ -253,9 +252,11 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         kb.postDelayed({ startDictationWhenReady(kb, attempts + 1) }, 300)
     }
 
+    /** Tap on the listening surface = "I'm done": flush the trailing words, then close it. */
     override fun onMicCancel() {
+        if (!micActive) return
         micActive = false
-        dictation.destroy()
+        dictation.stop()
         keyboard?.stopListeningUi()
     }
 
@@ -271,6 +272,7 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
     override fun onWindowHidden() { super.onWindowHidden(); broadcastImeVisible(false) }
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        if (micActive) { micActive = false; dictation.destroy(); keyboard?.stopListeningUi() }
         broadcastImeVisible(false)
     }
 
