@@ -1,0 +1,35 @@
+# Built application files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Build output
+build/
+bin/
+gen/
+out/
+
+# Gradle
+.gradle/
+.kotlin/
+
+# Local configuration (SDK path, signing, secrets)
+local.properties
+keystore/
+*.jks
+*.keystore
+secrets.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Nix
+.direnv/
+result
+
+# Local API-key config (never commit)
+config.local.env

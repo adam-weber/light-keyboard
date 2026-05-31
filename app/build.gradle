@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'app.lightphonekeyboard'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.lightphonekeyboard'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        resConfigs "en"
+
+        // Light Phone 3 is arm64 — ship only its native libs (Vosk .so) to keep the APK small.
+        ndk { abiFilters 'arm64-v8a' }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+
+    // Release signing is supplied via env vars (set in CI from repo secrets). When they're absent
+    // — e.g. local builds — the config stays empty and release APKs are simply unsigned; debug
+    // builds are what development uses, so no keystore is needed to work on the app.
+    signingConfigs {
+        release {
+            def storePath = System.getenv('KEYSTORE_FILE')
+            if (storePath) {
+                storeFile file(storePath)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        debug { applicationIdSuffix '.debug' }
+        release {
+            signingConfig System.getenv('KEYSTORE_FILE') ? signingConfigs.release : null
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    lint { abortOnError false }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    // Offline on-device speech recognition. The native libs ship in the APK (~10MB); the language
+    // model is NOT bundled — it's downloaded on demand when the user turns on voice dictation.
+    implementation 'com.alphacephei:vosk-android:0.3.47'
+}
