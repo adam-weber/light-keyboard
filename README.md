@@ -6,7 +6,8 @@ On a stock Light Phone, the black-and-white keyboard lives inside Light's own to
 system keyboard, and there is no Light one to choose. This is a faithful recreation, packaged as a
 system keyboard you can set as the default, so every app on a modified Light Phone shares the same look.
 
-Optional autocorrect and optional voice dictation, both fully on-device and private.
+Optional autocorrect and optional voice dictation, both fully on-device and private. Swipe down on the
+keyboard to hide it.
 
 ## Install
 

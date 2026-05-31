@@ -1,8 +1,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- White "K" (Keyboard) within the adaptive-icon safe zone, matching the aftermarket icon -->
-    <path android:strokeColor="#FFFFFF" android:strokeWidth="9" android:fillColor="#00000000"
-        android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M44,34 V74 M44,56 L67,34 M44,56 L67,74" />
+    <!-- White "K" (Keyboard): the actual Public Sans glyph, so it matches the generated icon/banner -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M36.46,77 V31 H42.56 V54.8 L63.18,31 H70.21 L54.84,49.07 L71.54,77 H64.9 L50.55,53.36 L42.56,62.49 V77 Z" />
 </vector>
