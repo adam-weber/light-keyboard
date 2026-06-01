@@ -20,7 +20,7 @@ import java.util.Locale
  *
  * Optional word-level autocorrect (toggle in [SetupActivity]) runs on top: as you type a word we ask
  * the device's own spell checker ([SpellCheckerSession] → the phone's built-in dictionary) about it,
- * and when the word is finished (space / punctuation / enter) we swap in the recommended fix. Case is
+ * and when the word is finished (space / punctuation / enter) we swap in the suggested fix. Case is
  * preserved, and the first backspace after a correction reverts it.
  */
 class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellCheckerSessionListener {
@@ -38,6 +38,11 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
     // the next backspace restores [undoTo] instead of deleting a character.
     private var undoFrom: String? = null
     private var undoTo: String? = null
+
+    // A word terminated before its spell-check came back. If the fix arrives while "word + terminator"
+    // is still sitting at the cursor, we apply it retroactively — covers typing faster than the checker.
+    private var lateWord: String? = null
+    private var lateTerminator: String? = null
 
     private var micActive = false
 
@@ -84,11 +89,14 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         updateShift() // after each keystroke/cursor move, recompute uppercase-vs-lowercase
     }
 
-    /** Sentence-case: uppercase at a sentence start, lowercase after — from the field's caps mode. */
+    /** Sentence-case: uppercase at a sentence start, lowercase after — from the field's caps mode.
+     *  When Auto-Capitalize is off we report no caps, so there's no auto-uppercase but a manual SHIFT
+     *  still one-shots (the next selection update drops it back to lowercase). */
     private fun updateShift() {
         val ic = currentInputConnection ?: return
         val type = currentInputEditorInfo?.inputType ?: return
-        keyboard?.setShifted(ic.getCursorCapsMode(type) != 0)
+        val caps = Prefs.autoCapitalize(this) && ic.getCursorCapsMode(type) != 0
+        keyboard?.setShifted(caps)
     }
 
     override fun textBeforeCursor(n: Int): CharSequence? =
@@ -98,6 +106,8 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
 
     override fun onText(s: String) {
         val ic = currentInputConnection ?: return
+        lateWord = null                    // any new input invalidates a pending late-correction
+        lateTerminator = null
         if (s.length == 1 && isWordChar(s[0])) {
             clearUndo()
             ic.commitText(s, 1)
@@ -126,6 +136,11 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         } else {
             clearUndo()
             ic.commitText(s, 1)
+            // The check may not have returned yet; remember the word so a late result can still fix it.
+            if (autocorrectOn() && original.length >= 2 && !corrections.containsKey(original)) {
+                lateWord = original
+                lateTerminator = s
+            }
         }
     }
 
@@ -198,6 +213,23 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
             ic.performEditorAction(action)
         } else {
             ic.commitText("\n", 1)
+        }
+    }
+
+    /** Auto-Period: a quick second space turns the trailing " " into ". " — but only after a letter
+     *  or digit, so a double space at line start or after punctuation just stays two spaces. The IME
+     *  owns the text, so the rewrite happens here; the view only detects the double tap. */
+    override fun onDoubleSpace() {
+        val ic = currentInputConnection ?: return
+        clearUndo()
+        val before = ic.getTextBeforeCursor(2, 0)?.toString().orEmpty()
+        if (before.length == 2 && before[1] == ' ' && before[0].isLetterOrDigit()) {
+            ic.beginBatchEdit()
+            ic.deleteSurroundingText(1, 0)   // drop the lone trailing space…
+            ic.commitText(". ", 1)           // …and replace it with period + space
+            ic.endBatchEdit()
+        } else {
+            ic.commitText(" ", 1)            // not eligible — behave like a normal space
         }
     }
 
@@ -308,21 +340,45 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         results ?: return
         for (si in results) {
             val word = pending.remove(si.sequence) ?: continue
-            corrections[word] = pickFix(si)
+            val fix = pickFix(si)
+            corrections[word] = fix
+            if (word == lateWord && fix != null && !fix.equals(word, ignoreCase = true)) {
+                applyLateFix(word, fix)
+            }
         }
+    }
+
+    /** A spell-check result came back after the word was already terminated. If "word + terminator" is
+     *  still sitting right before the cursor (the user hasn't typed on), swap in the fix now. */
+    private fun applyLateFix(original: String, fix: String) {
+        val ic = currentInputConnection ?: return
+        val term = lateTerminator ?: return
+        lateWord = null
+        lateTerminator = null
+        val tail = original + term
+        if (ic.getTextBeforeCursor(tail.length, 0)?.toString() != tail) return
+        val cased = applyCase(original, fix)
+        ic.beginBatchEdit()
+        ic.deleteSurroundingText(tail.length, 0)
+        ic.commitText(cased + term, 1)
+        ic.endBatchEdit()
+        undoFrom = cased + term
+        undoTo = original + term
     }
 
     override fun onGetSentenceSuggestions(results: Array<out SentenceSuggestionsInfo>?) {
         // Unused — we drive everything through the per-word getSuggestions path above.
     }
 
-    /** The top suggestion, but only when the checker is confident the word is a typo. */
+    /** The top suggestion whenever the checker flags the word as a typo (i.e. what gets the red
+     *  underline) and offers one. We don't require the stricter "recommended" flag — if a word is
+     *  flagged wrong we fix it, and an over-eager fix is a single backspace to undo. Real, in-dictionary
+     *  words are always left alone. */
     private fun pickFix(si: SuggestionsInfo): String? {
         val attr = si.suggestionsAttributes
         if (attr and SuggestionsInfo.RESULT_ATTR_IN_THE_DICTIONARY != 0) return null
         val typo = attr and SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
-        val recommended = attr and SuggestionsInfo.RESULT_ATTR_HAS_RECOMMENDED_SUGGESTIONS != 0
-        if (!typo || !recommended || si.suggestionsCount <= 0) return null
+        if (!typo || si.suggestionsCount <= 0) return null
         return si.getSuggestionAt(0)
     }
 

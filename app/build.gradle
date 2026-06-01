@@ -58,4 +58,6 @@ dependencies {
     // Offline on-device speech recognition. The native libs ship in the APK (~10MB); the language
     // model is NOT bundled — it's downloaded on demand when the user turns on voice dictation.
     implementation 'com.alphacephei:vosk-android:0.3.47'
+
+    testImplementation 'junit:junit:4.13.2'   // JVM unit tests for the pure TouchModel logic
 }
