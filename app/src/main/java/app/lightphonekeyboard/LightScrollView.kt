@@ -23,11 +23,13 @@ class LightScrollView @JvmOverloads constructor(
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
 
-    private val trackInset = dpf(32)    // top & bottom padding, so the bar doesn't reach the corners
-    private val rightMargin = dpf(12)   // bar centre, in from the right edge
-    private val trackWidth = dpf(1)     // thin track line
-    private val thumbWidth = dpf(6)     // wider thumb rectangle over the track
-    private val minThumb = dpf(24)      // floor, so the thumb never shrinks to a dot on long content
+    // Bar geometry, matched to the LightOS scrollbar (measured on an LP3, 408dpi).
+    private val trackInsetTop = dpf(63)     // bar starts ~161px below the top
+    private val trackInsetBottom = dpf(33)  // …and ends ~84px above the bottom
+    private val rightMargin = dpf(18)       // bar centre, ~46px in from the right edge
+    private val trackWidth = dpf(1)         // thin track line
+    private val thumbWidth = dpf(5)         // wider thumb rectangle over the track
+    private val minThumb = dpf(24)          // floor, so the thumb never shrinks to a dot on long content
 
     init {
         isVerticalScrollBarEnabled = false     // we draw our own
@@ -45,7 +47,8 @@ class LightScrollView @JvmOverloads constructor(
         val extent = computeVerticalScrollExtent()
         if (range <= extent) return            // content fits — no bar, like LightOS
 
-        val trackLen = height - trackInset * 2
+        val trackTop = trackInsetTop
+        val trackLen = height - trackInsetTop - trackInsetBottom
         if (trackLen <= 0f) return
         val cx = width - rightMargin
 
@@ -55,11 +58,11 @@ class LightScrollView @JvmOverloads constructor(
         canvas.translate(scrollX.toFloat(), scrollY.toFloat())
 
         // Track: the full thin line.
-        canvas.drawRect(cx - trackWidth / 2f, trackInset, cx + trackWidth / 2f, trackInset + trackLen, paint)
+        canvas.drawRect(cx - trackWidth / 2f, trackTop, cx + trackWidth / 2f, trackTop + trackLen, paint)
 
         // Thumb: a wider rectangle, sized and placed from the scroll proportions.
         val thumbLen = max(minThumb, trackLen * extent / range)
-        val thumbTop = trackInset + (trackLen - thumbLen) * computeVerticalScrollOffset() / (range - extent).toFloat()
+        val thumbTop = trackTop + (trackLen - thumbLen) * computeVerticalScrollOffset() / (range - extent).toFloat()
         canvas.drawRect(cx - thumbWidth / 2f, thumbTop, cx + thumbWidth / 2f, thumbTop + thumbLen, paint)
 
         canvas.restoreToCount(save)

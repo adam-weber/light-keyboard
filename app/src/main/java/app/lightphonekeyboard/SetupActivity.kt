@@ -50,8 +50,8 @@ class SetupActivity : AppCompatActivity() {
         val side = (34 * resources.displayMetrics.density).toInt()   // LightOS horizontal content inset (~88px)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            // Side inset matches LightOS; the right inset also keeps content clear of the scrollbar.
-            setPadding(side, pad, side, pad)
+            // Left inset matches LightOS; the right adds a gutter so content clears the scrollbar.
+            setPadding(side, pad, side + pad / 3, pad)
         }
 
         fun label(text: String, size: Float, color: Int) = TextView(this).apply {
