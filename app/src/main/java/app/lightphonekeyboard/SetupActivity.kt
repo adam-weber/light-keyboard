@@ -2,7 +2,6 @@ package app.lightphonekeyboard
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.provider.Settings
 import android.util.TypedValue
@@ -13,7 +12,6 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
@@ -25,7 +23,7 @@ import androidx.appcompat.app.AppCompatActivity
  */
 class SetupActivity : AppCompatActivity() {
 
-    private var voiceSwitch: Switch? = null
+    private var voiceToggle: LightToggle? = null
     private var voiceStatus: TextView? = null
     private var clearVoiceBtn: Button? = null
 
@@ -72,19 +70,12 @@ class SetupActivity : AppCompatActivity() {
             }
         }
 
-        val white = ColorStateList.valueOf(getColor(R.color.white))
-        val track = ColorStateList.valueOf(getColor(R.color.track))
-
-        fun switch(textRes: Int, checked: Boolean, onChange: (Boolean) -> Unit) = Switch(this).apply {
-            text = getString(textRes)
-            isAllCaps = false
-            textSize = 20f
-            setTextColor(getColor(R.color.white))
+        // Light Phone-style toggle row (see LightToggle): a line-and-dot mark with the label beside it.
+        fun toggle(textRes: Int, checked: Boolean, onChange: (Boolean) -> Unit) = LightToggle(this).apply {
+            setText(getString(textRes))
             setPadding(0, pad, 0, 0)
-            thumbTintList = white
-            trackTintList = track
             isChecked = checked
-            setOnCheckedChangeListener { _, v -> onChange(v) }
+            setOnCheckedChangeListener(onChange)
         }
 
         // Build the pieces once, then arrange them for the current orientation.
@@ -98,19 +89,19 @@ class SetupActivity : AppCompatActivity() {
         }
         val doneView = label(getString(R.string.setup_done), 14f, R.color.gray)
 
-        val autocorrectSwitch = switch(R.string.setup_autocorrect, Prefs.autocorrect(this)) {
+        val autocorrectToggle = toggle(R.string.setup_autocorrect, Prefs.autocorrect(this)) {
             Prefs.setAutocorrect(this, it)
         }
         val autocorrectSub = label(getString(R.string.setup_autocorrect_sub), 14f, R.color.gray)
         // Voice dictation — turning it on downloads the offline model once.
         voiceStatus = label("", 14f, R.color.gray)
-        voiceSwitch = switch(R.string.setup_voice, Prefs.voiceEnabled(this)) { onVoiceToggle(it) }
+        voiceToggle = toggle(R.string.setup_voice, Prefs.voiceEnabled(this)) { onVoiceToggle(it) }
         val voiceSub = label(getString(R.string.setup_voice_sub), 14f, R.color.gray)
         clearVoiceBtn = action(getString(R.string.setup_voice_clear)) { clearVoice() }
 
         listOf(
             titleView, blurbView, step1, step2, doneView,
-            autocorrectSwitch, autocorrectSub, voiceSwitch!!, voiceSub, voiceStatus!!, clearVoiceBtn!!,
+            autocorrectToggle, autocorrectSub, voiceToggle!!, voiceSub, voiceStatus!!, clearVoiceBtn!!,
         ).forEach { root.addView(it) }
         refreshVoice()
 
@@ -138,21 +129,21 @@ class SetupActivity : AppCompatActivity() {
             return
         }
         // Download the model first; only enable on success.
-        voiceSwitch?.isEnabled = false
+        voiceToggle?.isEnabled = false
         voiceStatus?.text = "Downloading voice model…"
         VoiceModel.install(
             this,
             onProgress = { p -> voiceStatus?.text = "Downloading voice model… $p%" },
             onDone = {
-                voiceSwitch?.isEnabled = true
+                voiceToggle?.isEnabled = true
                 Prefs.setVoiceEnabled(this, true)
                 voiceStatus?.text = "Voice ready."
                 refreshVoice()
             },
             onError = { msg ->
-                voiceSwitch?.isEnabled = true
+                voiceToggle?.isEnabled = true
                 Prefs.setVoiceEnabled(this, false)
-                voiceSwitch?.isChecked = false
+                voiceToggle?.isChecked = false
                 voiceStatus?.text = "Download failed: $msg"
                 refreshVoice()
             },
@@ -163,7 +154,7 @@ class SetupActivity : AppCompatActivity() {
     private fun clearVoice() {
         VoiceModel.remove(this)
         Prefs.setVoiceEnabled(this, false)
-        voiceSwitch?.isChecked = false
+        voiceToggle?.isChecked = false
         voiceStatus?.text = "Voice model deleted."
         refreshVoice()
     }
