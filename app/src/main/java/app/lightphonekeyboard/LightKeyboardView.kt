@@ -47,6 +47,8 @@ class LightKeyboardView @JvmOverloads constructor(
         /** Delete the previous whole word (key-repeat escalates to this after a long hold). */
         fun onBackspaceWord()
         fun onEnter()
+        /** Space tapped twice quickly (Auto-Period): turn the trailing space into ". ". */
+        fun onDoubleSpace()
         fun onDismiss()
         /** Up to [n] characters immediately before the cursor, for the typing-accuracy context model. */
         fun textBeforeCursor(n: Int): CharSequence?
@@ -78,6 +80,19 @@ class LightKeyboardView @JvmOverloads constructor(
             listOf(Key.SHIFT, "z", "x", "c", "v", "b", "n", "m", Key.BACKSPACE),
             listOf(Key.SYMBOLS, Key.EMOJI, Key.SPACE, Key.ENTER, Key.MIC),
         )
+        // French AZERTY and German QWERTZ — same control keys, only the three letter rows differ.
+        val azerty = listOf(
+            listOf("a", "z", "e", "r", "t", "y", "u", "i", "o", "p"),
+            listOf("q", "s", "d", "f", "g", "h", "j", "k", "l", "m"),
+            listOf(Key.SHIFT, "w", "x", "c", "v", "b", "n", Key.BACKSPACE),
+            listOf(Key.SYMBOLS, Key.EMOJI, Key.SPACE, Key.ENTER, Key.MIC),
+        )
+        val qwertz = listOf(
+            listOf("q", "w", "e", "r", "t", "z", "u", "i", "o", "p"),
+            listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
+            listOf(Key.SHIFT, "y", "x", "c", "v", "b", "n", "m", Key.BACKSPACE),
+            listOf(Key.SYMBOLS, Key.EMOJI, Key.SPACE, Key.ENTER, Key.MIC),
+        )
         val symbols = listOf(
             listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
             listOf("-", "/", ":", ";", "(", ")", "$", "&", "@", "\""),
@@ -103,6 +118,12 @@ class LightKeyboardView @JvmOverloads constructor(
     private var shifted = true
     private var capsLock = false           // double-tap shift → stays uppercase until tapped off
     private var lastShiftTapMs = 0L
+    private var lastSpaceTapMs = 0L        // for Auto-Period (double-tap space → ". ")
+
+    // Prefs cached on reset()/init so the layout pass doesn't re-read SharedPreferences per row.
+    private var keyLayout = Prefs.LAYOUT_QWERTY
+    private var autoPeriod = true
+    private val hiddenKeys = HashSet<String>()   // control keys removed by their settings toggles
 
     // Voice-dictation listening overlay (drawn instead of keys while the recognizer is active).
     private var listening = false
@@ -132,13 +153,44 @@ class LightKeyboardView @JvmOverloads constructor(
     private val placed = ArrayList<PlacedKey>()
     private val letterKeys = ArrayList<PlacedKey>()   // a-z keys only, for the accuracy model
 
-    // --- metrics (px) ---
-    private val padTop = dpf(8)
-    private val padBottom = dpf(10)
-    private val padSide = dpf(6)
-    private val keyGap = dpf(3)        // half the visible gutter; applied as an inset on each side
-    private val rowKeyH = dpf(48)
-    private val rowPitch = rowKeyH + keyGap * 2   // ~54dp per row
+    // --- metrics (px), set by applyPrefs() for the active size mode ---
+    // Regular matches the LightOS keyboard; compact tightens the gutters and shortens the keys so the
+    // keyboard eats less of the small screen. The accuracy model is shared across both: its spatial
+    // term is normalised by the live key width / rowPitch (so it rescales itself), and its language
+    // term (charmodel.bin) is geometry-independent — see the "typing accuracy" section below.
+    private var compact = false
+    private var padTop = 0f
+    private var padBottom = 0f
+    private var padSide = 0f
+    private var keyGap = 0f             // half the visible gutter; applied as an inset on each side
+    private var rowKeyH = 0f
+    private var rowPitch = 0f           // rowKeyH + keyGap*2, one row band
+    private var keyTextSize = 0f        // single-character key label
+    private var labelTextSize = 0f      // multi-character key label (ABC / 123 / #+=)
+    private var emojiTextSize = 0f
+
+    /** Cache all view-side prefs (size mode, layout, key visibility, Auto-Period). Idempotent;
+     *  called on init and on every reset(), so settings changes take effect next time the keyboard opens. */
+    private fun applyPrefs() {
+        compact = Prefs.compactMode(context)
+        if (compact) {
+            padTop = dpf(4); padBottom = dpf(5); padSide = dpf(4)
+            keyGap = dpf(2); rowKeyH = dpf(32)
+            keyTextSize = spf(20); labelTextSize = spf(15); emojiTextSize = spf(24)
+        } else {
+            padTop = dpf(8); padBottom = dpf(10); padSide = dpf(6)
+            keyGap = dpf(3); rowKeyH = dpf(48)
+            keyTextSize = spf(26); labelTextSize = spf(18); emojiTextSize = spf(30)
+        }
+        rowPitch = rowKeyH + keyGap * 2
+
+        keyLayout = Prefs.keyLayout(context)
+        autoPeriod = Prefs.autoPeriod(context)
+        hiddenKeys.clear()
+        if (!Prefs.voiceEnabled(context)) hiddenKeys.add(Key.MIC)
+        if (!Prefs.emojiKey(context)) hiddenKeys.add(Key.EMOJI)
+        if (!Prefs.returnKey(context)) hiddenKeys.add(Key.ENTER)
+    }
 
     private val emojiCols = 8
     private val emojiRowCount = (Layout.emoji.size + emojiCols - 1) / emojiCols  // 24 / 8 = 3
@@ -163,19 +215,26 @@ class LightKeyboardView @JvmOverloads constructor(
     init {
         setBackgroundColor(Color.BLACK)
         setWillNotDraw(false)
+        applyPrefs()
         rebuild()
+        // Note: loadLearnedOffsets() runs in onAttachedToWindow, not here — the offset fields are
+        // declared lower in the file, so they aren't initialized yet during this init block.
     }
 
     private val currentRows: List<List<String>>
         get() {
             val rows = when (layer) {
-                Layer.LETTERS -> Layout.letters
+                Layer.LETTERS -> when (keyLayout) {
+                    Prefs.LAYOUT_AZERTY -> Layout.azerty
+                    Prefs.LAYOUT_QWERTZ -> Layout.qwertz
+                    else -> Layout.letters
+                }
                 Layer.SYMBOLS -> Layout.symbols
                 Layer.MORE -> Layout.more
                 Layer.EMOJI -> emptyList()
             }
-            // Mic key only when voice dictation is turned on; otherwise the bottom row is 4 keys.
-            return if (Prefs.voiceEnabled(context)) rows else rows.map { row -> row.filter { it != Key.MIC } }
+            // Drop any control keys turned off in settings (mic / emoji / return); the row reflows.
+            return if (hiddenKeys.isEmpty()) rows else rows.map { row -> row.filter { it !in hiddenKeys } }
         }
 
     // ------------------------------------------------------------------ layout
@@ -279,7 +338,7 @@ class LightKeyboardView @JvmOverloads constructor(
         // Back-to-letters chevron: its own row band (hit spans the full width), drawn as a centered chevron.
         val backTop = padTop + rows.size * rowPitch
         val boxW = dpf(64)
-        val boxH = dpf(48)
+        val boxH = rowKeyH
         val cx = w / 2f
         val cy = backTop + keyGap + rowKeyH / 2f
         placed.add(
@@ -361,7 +420,7 @@ class LightKeyboardView @JvmOverloads constructor(
             }
             return
         }
-        val size = if (layer == Layer.EMOJI) spf(30) else if (id.length == 1) spf(26) else spf(18)
+        val size = if (layer == Layer.EMOJI) emojiTextSize else if (id.length == 1) keyTextSize else labelTextSize
         textPaint.textSize = size
         val baseline = pk.vis.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
         canvas.drawText(labelFor(id), pk.vis.centerX(), baseline, textPaint)
@@ -386,11 +445,12 @@ class LightKeyboardView @JvmOverloads constructor(
         else -> null
     }
 
+    // Icon inset inside its key. Compact keys are shorter, so the insets shrink too or the glyphs vanish.
     private fun padFor(id: String): Float = when (id) {
-        Key.SHIFT -> dpf(9)
-        Key.BACKSPACE, Key.EMOJI_BACK -> dpf(10)
-        Key.MIC -> dpf(9)
-        else -> dpf(7)
+        Key.SHIFT -> if (compact) dpf(6) else dpf(9)
+        Key.BACKSPACE, Key.EMOJI_BACK -> if (compact) dpf(7) else dpf(10)
+        Key.MIC -> if (compact) dpf(6) else dpf(9)
+        else -> if (compact) dpf(5) else dpf(7)
     }
 
     private fun labelFor(id: String): String =
@@ -498,6 +558,15 @@ class LightKeyboardView @JvmOverloads constructor(
     // boundary this lets context break the tie (after "th", a tap between e/r/w resolves to "e").
     // A confident tap inside a key's core is returned directly, so deliberate taps are never
     // overridden. Distances are normalised by key width / row pitch so both axes are comparable.
+    //
+    // Two refinements from the touch-modelling literature:
+    //   - The spatial Gaussian width has a fixed finger-size floor (FFitts / dual-Gaussian model,
+    //     Bi/Li/Zhai CHI'13): touch scatter = a size-proportional part PLUS a ~constant ≈finger-width
+    //     part. On small keys the floor dominates, so the short compact rows widen the spatial term on
+    //     their own and let the language model carry more of the tap — no per-mode tuning needed.
+    //   - The touch point is shifted up by a *per-row* offset (the "perceived input point" parallax —
+    //     Holz & Baudisch; per-row because finger pitch varies by row, Henze et al.) that is learned
+    //     per-user from the typist's own taps (see learnOffset / rowBiasPrior).
 
     /** Holds ln P(c3 | c1,c2) for the 27-symbol alphabet (a-z + word boundary). */
     private class CharModel(private val logp: FloatArray) {
@@ -507,21 +576,40 @@ class LightKeyboardView @JvmOverloads constructor(
 
     private val charModel: CharModel? by lazy { loadCharModel() }
 
-    // Tunables. biasY shifts the effective touch point up because fingers tend to land low; if a
-    // particular zone reads wrong, nudge these. LAMBDA scales how much context can sway a tap.
+    // Tunables. lambda scales how much context can sway a tap; sigmaFrac/sigmaAbs set the spatial
+    // Gaussian width (see resolveLetter). If a particular zone reads wrong, nudge these.
     private val biasX = 0f
-    private val biasY = -dpf(6)
     private val coreFrac = 0.5f       // within this fraction of a key (normalised) → no override
-    private val sigmaFrac = 0.72f     // Gaussian width in key units
+    private val sigmaFrac = 0.72f     // size-proportional Gaussian width, in key units
+    private val sigmaAbs = dpf(11)    // fixed finger-size floor (≈1.7 mm), added in quadrature (FFitts)
     private val radiusFrac = 1.5f     // only score candidates within this many key units
     private val lambda = 1.0f
+
+    // Per-row vertical touch offset (px). Fingers land low — the "perceived input point" parallax: you
+    // aim with the top of your finger but the screen senses the contact patch lower down (Holz &
+    // Baudisch). The undershoot also varies by row, since finger pitch differs top-to-bottom (Henze
+    // et al.). Negative shifts the effective point up. [0] = top (qwerty) … [2] = bottom (zxcv).
+    //
+    // (a) rowBiasPrior is the starting guess for a fresh user. (b) learnedBiasY adapts it per-user from
+    // their own taps (see learnOffset) and is persisted — the parallax offset is strongly individual
+    // (Holz & Baudisch; Weir et al.), so the personal value is where the real accuracy gain is.
+    private val rowBiasPrior = floatArrayOf(-dpf(10), -dpf(8), -dpf(6))
+    private val learnedBiasY = rowBiasPrior.copyOf()   // safe default = the prior; loadLearnedOffsets refines
+    private val offsetLearnRate = 0.06f   // EMA step per tap; slow, so a few stray taps don't sway it
 
     private fun isLetter(id: String): Boolean = id.length == 1 && id[0] in 'a'..'z'
 
     private fun resolveLetter(x: Float, y: Float, raw: PlacedKey): PlacedKey {
         if (letterKeys.isEmpty()) return raw
+        val result = resolveLetterTo(x, y, raw)
+        learnOffset(y, result)   // passively adapt the per-row offset from this tap
+        return result
+    }
+
+    /** The spatial × language resolution; [resolveLetter] wraps it to also learn the touch offset. */
+    private fun resolveLetterTo(x: Float, y: Float, raw: PlacedKey): PlacedKey {
         val cx = x + biasX
-        val cy = y + biasY
+        val cy = y + learnedBiasY[rowOf(raw)]
         val kw = raw.vis.width().coerceAtLeast(1f)
         // nearest letter key, in normalised (per-axis) distance
         var nearest = raw
@@ -533,17 +621,54 @@ class LightKeyboardView @JvmOverloads constructor(
         if (sqrt(nd2) < coreFrac) return nearest          // confident tap — leave it alone
         val model = charModel ?: return nearest
         val (c1, c2) = contextSymbols()
-        val sigma2 = 2f * sigmaFrac * sigmaFrac
+        // Per-axis Gaussian widths (key units): the size-proportional sigmaFrac combined in quadrature
+        // with the fixed sigmaAbs floor. The floor is a constant in px, so on the short compact rows it
+        // grows as a fraction of the row pitch — widening the vertical term and ceding more to context.
+        val twoSx2 = 2f * sigmaKeyUnits(kw).let { it * it }
+        val twoSy2 = 2f * sigmaKeyUnits(rowPitch).let { it * it }
         val radius2 = radiusFrac * radiusFrac
         var best = nearest
         var bestScore = -Float.MAX_VALUE
         for (k in letterKeys) {
-            val d2 = norm2(k, cx, cy, kw)
-            if (d2 > radius2) continue
-            val score = -d2 / sigma2 + lambda * model.lp(c1, c2, k.id[0] - 'a')
+            val dx = (k.cx - cx) / kw
+            val dy = (k.cy - cy) / rowPitch
+            if (dx * dx + dy * dy > radius2) continue
+            val score = -dx * dx / twoSx2 - dy * dy / twoSy2 + lambda * model.lp(c1, c2, k.id[0] - 'a')
             if (score > bestScore) { bestScore = score; best = k }
         }
         return best
+    }
+
+    /** Gaussian σ along one axis, in normalised key-units: the size-proportional [sigmaFrac] combined
+     *  in quadrature with the fixed px floor [sigmaAbs] (expressed in key-units via the axis [pitchPx]). */
+    private fun sigmaKeyUnits(pitchPx: Float): Float {
+        val floor = sigmaAbs / pitchPx
+        return sqrt(sigmaFrac * sigmaFrac + floor * floor)
+    }
+
+    /** Which letter row a key sits in (0 = top … 2 = bottom), from its centre. */
+    private fun rowOf(key: PlacedKey): Int =
+        ((key.cy - padTop) / rowPitch).toInt().coerceIn(0, learnedBiasY.size - 1)
+
+    /** Passively learn the per-row vertical offset: nudge the resolved key's row toward centring this
+     *  tap. Skip taps where the language model overrode a far spatial pick (the intended position is
+     *  unreliable there), and clamp, so a few stray taps can never run the offset away. */
+    private fun learnOffset(rawY: Float, key: PlacedKey) {
+        val row = rowOf(key)
+        val delta = rawY - key.cy                                      // + if the tap landed low
+        if (abs(delta + learnedBiasY[row]) > 0.6f * rowPitch) return   // not a clean same-key tap
+        learnedBiasY[row] += offsetLearnRate * (-delta - learnedBiasY[row])
+        learnedBiasY[row] = learnedBiasY[row].coerceIn(-dpf(24), dpf(2))   // ≈3.8 mm of upward headroom
+    }
+
+    /** Restore the learned offsets (px), or fall back to the prior for a fresh install. */
+    private fun loadLearnedOffsets() {
+        val saved = Prefs.touchOffsets(context)?.split(",")?.mapNotNull { it.toFloatOrNull() }
+        for (i in learnedBiasY.indices) learnedBiasY[i] = saved?.getOrNull(i) ?: rowBiasPrior[i]
+    }
+
+    private fun saveLearnedOffsets() {
+        Prefs.setTouchOffsets(context, learnedBiasY.joinToString(",") { it.toString() })
     }
 
     private fun norm2(k: PlacedKey, cx: Float, cy: Float, kw: Float): Float {
@@ -578,6 +703,7 @@ class LightKeyboardView @JvmOverloads constructor(
     /** Applies a key. Returns true if it committed a single retractable character (text or space). */
     private fun onKey(id: String): Boolean {
         tap()
+        if (id != Key.SPACE) lastSpaceTapMs = 0L   // any other key breaks a pending double-space
         when (id) {
             Key.SHIFT -> { onShift(); rebuild() }
             Key.BACKSPACE -> listener?.onBackspace()
@@ -588,7 +714,13 @@ class LightKeyboardView @JvmOverloads constructor(
             Key.MORE -> { layer = Layer.MORE; rebuild() }
             Key.LETTERS -> { layer = Layer.LETTERS; rebuild() }
             Key.MIC -> listener?.onMic()
-            Key.SPACE -> { listener?.onText(" "); return true }
+            Key.SPACE -> {
+                val now = System.currentTimeMillis()
+                val doublePeriod = autoPeriod && now - lastSpaceTapMs < DOUBLE_TAP_MS
+                lastSpaceTapMs = if (doublePeriod) 0L else now   // consume, so a 3rd tap starts fresh
+                if (doublePeriod) { listener?.onDoubleSpace(); return false }
+                listener?.onText(" "); return true
+            }
             else -> {
                 if (layer == Layer.EMOJI) { listener?.onText(id); return false }
                 listener?.onText(labelFor(id))
@@ -610,14 +742,26 @@ class LightKeyboardView @JvmOverloads constructor(
         lastShiftTapMs = now
     }
 
-    /** Reset to the default letters/uppercase view (called when a new field gains focus). */
+    /** Reset to the default letters view (called when a new field gains focus). Also re-reads prefs,
+     *  so toggling compact / layout / key visibility in settings takes effect next time the keyboard
+     *  opens. Initial uppercase follows Auto-Capitalize (the IME's updateShift refines it immediately). */
     fun reset() {
         stopBackspaceRepeat()
-        layer = Layer.LETTERS; shifted = true; capsLock = false; listening = false; rebuild()
+        saveLearnedOffsets()   // persist what we learned in the field we're leaving
+        applyPrefs()
+        layer = Layer.LETTERS
+        shifted = Prefs.autoCapitalize(context)
+        capsLock = false; listening = false; rebuild()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        loadLearnedOffsets()   // safe here: construction is complete, so the offset fields exist
     }
 
     override fun onDetachedFromWindow() {
         stopBackspaceRepeat()
+        saveLearnedOffsets()
         super.onDetachedFromWindow()
     }
 
