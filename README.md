@@ -29,15 +29,21 @@ Open Light Keyboard. The setup screen holds everything:
 1. **Enable Light Keyboard**: opens Android's keyboard settings, where you switch it on.
 2. **Choose it as your keyboard**: makes it the active one.
 
-Two optional settings sit below:
+A few optional settings sit below:
 
 - **Autocorrect** (on by default): fixes misspellings as you type, using your phone's built-in
   dictionary. Turn it off to type exactly what you tap.
-- **Voice dictation** (off by default): turning it on downloads the ~40 MB offline model once, then a
-  mic key lets you speak instead of type, entirely on-device. Once downloaded, a **Delete voice model**
-  button appears to reclaim the space.
+- **Auto-Capitalize** (on by default): capitalizes the start of each sentence.
+- **Auto-Period** (on by default): double-tap the space bar to insert a period.
+- **Return key** / **Emoji keyboard** (both on by default): show or hide those keys.
+- **Voice dictation** (off by default): turning it on downloads a ~40 MB offline speech-to-text model
+  (Vosk) once, then a mic key lets you speak instead of type, entirely on-device. Once downloaded, a
+  **Delete model** link appears beside the toggle to reclaim the space.
+- **Compact keyboard** (off by default): shorter keys and tighter spacing, so the keyboard takes up
+  less of the screen.
+- **Keyboard layout**: choose QWERTY, AZERTY, or QWERTZ.
 
-That is the whole setup.
+Layout / appearance changes take effect the next time the keyboard opens. That is the whole setup.
 
 ## Build it yourself
 

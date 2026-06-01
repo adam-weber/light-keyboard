@@ -2,14 +2,19 @@
 <resources>
     <string name="app_name">Light Keyboard</string>
     <string name="setup_title">Light Keyboard</string>
-    <string name="setup_blurb">A minimal black-and-white keyboard for the Light Phone. Two quick steps:</string>
+    <string name="setup_blurb">A minimal black-and-white keyboard.</string>
     <string name="setup_step1">1. Enable Light Keyboard</string>
     <string name="setup_step2">2. Choose it as your keyboard</string>
-    <string name="setup_enabled">✓ Enabled</string>
-    <string name="setup_done">Setup complete. It will appear in every text field. Swipe down on the keyboard to close it.</string>
     <string name="setup_autocorrect">Autocorrect</string>
-    <string name="setup_autocorrect_sub">Fix misspellings as you type, using the phone\'s built-in dictionary.</string>
+    <string name="setup_autocap">Auto-Capitalize</string>
+    <string name="setup_autoperiod">Auto-Period</string>
+    <string name="setup_layout">Keyboard layout</string>
+    <string name="setup_compact">Compact keyboard</string>
+    <string name="setup_returnkey">Return key</string>
+    <string name="setup_emojikey">Emoji keyboard</string>
+    <string name="layout_title">Keyboard layout</string>
+    <string name="layout_back">← Back</string>
     <string name="setup_voice">Voice dictation</string>
-    <string name="setup_voice_sub">Private, on-device. Downloads 40 MB once.</string>
-    <string name="setup_voice_clear">Delete voice model (frees ~40 MB)</string>
+    <string name="setup_voice_dl">(40MB download)</string>
+    <string name="setup_voice_clear">Delete model</string>
 </resources>

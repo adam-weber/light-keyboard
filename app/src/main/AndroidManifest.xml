@@ -50,5 +50,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Keyboard layout picker (QWERTY / AZERTY / QWERTZ), opened from setup. -->
+        <activity
+            android:name=".KeyboardLayoutActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
     </application>
 </manifest>

@@ -2,16 +2,16 @@ package app.lightphonekeyboard
 
 import android.content.Context
 import android.content.Intent
+import android.database.ContentObserver
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
@@ -25,14 +25,33 @@ class SetupActivity : AppCompatActivity() {
 
     private var voiceToggle: LightToggle? = null
     private var voiceStatus: TextView? = null
-    private var clearVoiceBtn: Button? = null
+    private var voiceAccessory: TextView? = null
+    private var layoutValue: TextView? = null
+    private var step1: Step? = null
+    private var step2: Step? = null
+
+    // The keyboard picker is a popup (no onResume when it closes), so watch the default-IME setting
+    // directly — otherwise step 2 keeps a stale ✓ after you switch to a different keyboard.
+    private val imeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) = refreshSetupState()
+    }
+
+    /** A numbered setup step whose trailing mark flips from a → arrow to a ✓ once it's satisfied. */
+    private class Step(val row: View, private val arrow: View, private val check: View) {
+        fun setDone(done: Boolean) {
+            arrow.visibility = if (done) View.GONE else View.VISIBLE
+            check.visibility = if (done) View.VISIBLE else View.GONE
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val pad = (24 * resources.displayMetrics.density).toInt()
+        val side = (34 * resources.displayMetrics.density).toInt()   // LightOS horizontal content inset (~88px)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, pad)
+            // Side inset matches LightOS; the right inset also keeps content clear of the scrollbar.
+            setPadding(side, pad, side, pad)
         }
 
         fun label(text: String, size: Float, color: Int) = TextView(this).apply {
@@ -42,32 +61,27 @@ class SetupActivity : AppCompatActivity() {
             setPadding(0, pad / 3, 0, pad / 3)
         }
 
-        fun action(text: String, onClick: () -> Unit) = Button(this).apply {
-            this.text = text
-            isAllCaps = false
-            textSize = 20f
-            setTextColor(getColor(R.color.white))
-            setBackgroundColor(getColor(R.color.black))
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setOnClickListener { onClick() }
-        }
-
-        // A setup step, styled as a tappable row: label on the left, a subtle right arrow on the right.
-        fun stepRow(text: String, onClick: () -> Unit): View {
-            val ripple = TypedValue().also {
-                theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true)
-            }
+        // A completable setup step: label, a → arrow that flips to a ✓ once done. No tap highlight,
+        // per the minimal aesthetic — the row stays clickable, it just doesn't tint on press.
+        fun step(text: String, onClick: () -> Unit): Step {
             val labelView = label(text, 20f, R.color.white)
             val arrowView = ImageView(this).apply { setImageResource(R.drawable.ic_setup_arrow) }
-            return LinearLayout(this).apply {
+            val checkView = TextView(this).apply {
+                this.text = "✓"
+                setTextColor(getColor(R.color.white))
+                textSize = 20f
+                visibility = View.GONE
+            }
+            val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 isClickable = true
-                setBackgroundResource(ripple.resourceId)
                 setOnClickListener { onClick() }
                 addView(labelView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                 addView(arrowView)
+                addView(checkView)
             }
+            return Step(row, arrowView, checkView)
         }
 
         // Light Phone-style toggle row (see LightToggle): a line-and-dot mark with the label beside it.
@@ -78,73 +92,180 @@ class SetupActivity : AppCompatActivity() {
             setOnCheckedChangeListener(onChange)
         }
 
-        // Build the pieces once, then arrange them for the current orientation.
+        // Build the pieces once, then arrange them. Each setup step flips its → to a ✓ once satisfied;
+        // toggles carry no descriptions (their names say enough), keeping the list short on the screen.
         val titleView = label(getString(R.string.setup_title), 28f, R.color.white)
         val blurbView = label(getString(R.string.setup_blurb), 16f, R.color.gray)
-        val step1 = stepRow(getString(R.string.setup_step1)) {
+        val s1 = step(getString(R.string.setup_step1)) {
             startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
         }
-        val step2 = stepRow(getString(R.string.setup_step2)) {
+        val s2 = step(getString(R.string.setup_step2)) {
             (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
         }
-        val doneView = label(getString(R.string.setup_done), 14f, R.color.gray)
+        step1 = s1
+        step2 = s2
 
         val autocorrectToggle = toggle(R.string.setup_autocorrect, Prefs.autocorrect(this)) {
             Prefs.setAutocorrect(this, it)
         }
-        val autocorrectSub = label(getString(R.string.setup_autocorrect_sub), 14f, R.color.gray)
-        // Voice dictation — turning it on downloads the offline model once.
-        voiceStatus = label("", 14f, R.color.gray)
+        val autocapToggle = toggle(R.string.setup_autocap, Prefs.autoCapitalize(this)) {
+            Prefs.setAutoCapitalize(this, it)
+        }
+        val autoperiodToggle = toggle(R.string.setup_autoperiod, Prefs.autoPeriod(this)) {
+            Prefs.setAutoPeriod(this, it)
+        }
+        val returnToggle = toggle(R.string.setup_returnkey, Prefs.returnKey(this)) {
+            Prefs.setReturnKey(this, it)
+        }
+        val emojiToggle = toggle(R.string.setup_emojikey, Prefs.emojiKey(this)) {
+            Prefs.setEmojiKey(this, it)
+        }
+        val compactToggle = toggle(R.string.setup_compact, Prefs.compactMode(this)) {
+            Prefs.setCompactMode(this, it)
+        }
+
+        // Voice dictation row. The toggle keeps its normal padding so the row is exactly as tall as
+        // every other toggle; the accessory (right) is a sibling view — tapping it doesn't flip the
+        // toggle. Download progress / errors show on a transient line below.
         voiceToggle = toggle(R.string.setup_voice, Prefs.voiceEnabled(this)) { onVoiceToggle(it) }
-        val voiceSub = label(getString(R.string.setup_voice_sub), 14f, R.color.gray)
-        clearVoiceBtn = action(getString(R.string.setup_voice_clear)) { clearVoice() }
+        // Right-side accessory: "(40MB download)" before the model is installed, "Delete model"
+        // (tappable) once it is — same grey, size, and place either way (refreshVoice swaps the text).
+        voiceAccessory = label("", 14f, R.color.gray).apply {
+            setPadding(pad / 2, pad, 0, 0)   // top padding matches the toggle's, so it aligns with the label
+            setOnClickListener { clearVoice() }
+        }
+        val voiceRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(voiceToggle, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(voiceAccessory)
+        }
+        voiceStatus = label("", 14f, R.color.gray)
+
+        // Keyboard layout — one tappable line: title on the left, the current layout value on the right.
+        val layoutRow = run {
+            val title = label(getString(R.string.setup_layout), 20f, R.color.white).apply { setPadding(0, 0, 0, 0) }
+            layoutValue = label("", 14f, R.color.gray).apply { setPadding(0, 0, 0, 0) }
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, pad, 0, 0)   // top gap matching the spacing between toggles
+                isClickable = true
+                setOnClickListener {
+                    startActivity(Intent(this@SetupActivity, KeyboardLayoutActivity::class.java))
+                }
+                addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(layoutValue)
+            }
+        }
 
         listOf(
-            titleView, blurbView, step1, step2, doneView,
-            autocorrectToggle, autocorrectSub, voiceToggle!!, voiceSub, voiceStatus!!, clearVoiceBtn!!,
+            titleView, blurbView, s1.row, s2.row,
+            autocorrectToggle, autocapToggle, autoperiodToggle, returnToggle, emojiToggle,
+            voiceRow, voiceStatus!!, compactToggle,
+            layoutRow,
         ).forEach { root.addView(it) }
         refreshVoice()
+        refreshLayout()
+        refreshSetupState()
 
         // Scrollable: in portrait the setup content is taller than the Light Phone screen.
-        setContentView(ScrollView(this).apply {
+        setContentView(LightScrollView(this).apply {
             setBackgroundColor(getColor(R.color.black))
             addView(root)
         })
     }
 
-    /** Show the "clear download" action only when the model is actually on disk. */
+    override fun onResume() {
+        super.onResume()
+        refreshLayout()       // reflect a layout chosen on the picker page
+        refreshSetupState()   // steps may have been completed over in system settings
+        contentResolver.registerContentObserver(
+            Settings.Secure.getUriFor(Settings.Secure.DEFAULT_INPUT_METHOD), false, imeObserver,
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        contentResolver.unregisterContentObserver(imeObserver)
+    }
+
+    /** Voice row reflects whether the model is on disk: the toggle label shows the download size until
+     *  then, and the inline "Delete" link appears once it is. */
     private fun refreshVoice() {
-        clearVoiceBtn?.visibility = if (VoiceModel.isInstalled(this)) View.VISIBLE else View.GONE
+        val installed = VoiceModel.isInstalled(this)
+        voiceAccessory?.apply {
+            text = getString(if (installed) R.string.setup_voice_clear else R.string.setup_voice_dl)
+            isClickable = installed   // only "Delete model" is tappable; "(40MB download)" is just info
+        }
+        updateVoiceStatus()
+    }
+
+    private fun setVoiceStatus(text: String) {
+        voiceStatus?.text = text
+        updateVoiceStatus()
+    }
+
+    /** The status line shows only while there's a message (download progress / error). */
+    private fun updateVoiceStatus() {
+        voiceStatus?.visibility = if (voiceStatus?.text?.isNotEmpty() == true) View.VISIBLE else View.GONE
+    }
+
+    /** Flip each setup step's → to a ✓ as it's satisfied (enabled, then default). */
+    private fun refreshSetupState() {
+        step1?.setDone(imeEnabled())   // → flips to ✓ once enabled
+        step2?.setDone(imeDefault())   // → flips to ✓ once it's the default (tapping it opens the picker)
+    }
+
+    private fun imeId(): String = "$packageName/${LightImeService::class.java.name}"
+
+    private fun imeEnabled(): Boolean {
+        val imm = getSystemService(InputMethodManager::class.java) ?: return false
+        return imm.enabledInputMethodList.any { it.id == imeId() }
+    }
+
+    private fun imeDefault(): Boolean =
+        Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) == imeId()
+
+    /** Update the current-layout name shown on the keyboard-layout row. */
+    private fun refreshLayout() {
+        layoutValue?.text = layoutName(Prefs.keyLayout(this))
+    }
+
+    private fun layoutName(key: String): String = when (key) {
+        Prefs.LAYOUT_AZERTY -> "AZERTY"
+        Prefs.LAYOUT_QWERTZ -> "QWERTZ"
+        else -> "QWERTY"
     }
 
     private fun onVoiceToggle(on: Boolean) {
         if (!on) {
             Prefs.setVoiceEnabled(this, false)
-            voiceStatus?.text = ""
+            setVoiceStatus("")
             return
         }
         if (VoiceModel.isInstalled(this)) {
             Prefs.setVoiceEnabled(this, true)
-            voiceStatus?.text = "Voice ready."
+            setVoiceStatus("")
             return
         }
         // Download the model first; only enable on success.
         voiceToggle?.isEnabled = false
-        voiceStatus?.text = "Downloading voice model…"
+        setVoiceStatus("Downloading voice model…")
         VoiceModel.install(
             this,
-            onProgress = { p -> voiceStatus?.text = "Downloading voice model… $p%" },
+            onProgress = { p -> setVoiceStatus("Downloading voice model… $p%") },
             onDone = {
                 voiceToggle?.isEnabled = true
                 Prefs.setVoiceEnabled(this, true)
-                voiceStatus?.text = "Voice ready."
+                setVoiceStatus("")
                 refreshVoice()
             },
             onError = { msg ->
                 voiceToggle?.isEnabled = true
                 Prefs.setVoiceEnabled(this, false)
                 voiceToggle?.isChecked = false
-                voiceStatus?.text = "Download failed: $msg"
+                setVoiceStatus("Download failed: $msg")
                 refreshVoice()
             },
         )
@@ -155,7 +276,7 @@ class SetupActivity : AppCompatActivity() {
         VoiceModel.remove(this)
         Prefs.setVoiceEnabled(this, false)
         voiceToggle?.isChecked = false
-        voiceStatus?.text = "Voice model deleted."
+        setVoiceStatus("")
         refreshVoice()
     }
 }
