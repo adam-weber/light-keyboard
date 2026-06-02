@@ -48,3 +48,6 @@ jobs:
         with:
           files: dist/light-keyboard-*.apk
           generate_release_notes: true
+          # Tags with a pre-release suffix (e.g. v0.2.0-beta.1) publish as GitHub pre-releases, so test
+          # builds don't become the "latest" release that stable Obtainium users pick up.
+          prerelease: ${{ contains(github.ref_name, '-') }}

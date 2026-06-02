@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -14,6 +15,7 @@ import android.view.View
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.sqrt
 
 /**
@@ -56,6 +58,8 @@ class LightKeyboardView @JvmOverloads constructor(
         fun onMic()
         /** Listening surface tapped — cancel dictation. */
         fun onMicCancel()
+        /** A glide gesture decoded to these candidate words (best first); commit the first. */
+        fun onSwipeWord(candidates: List<String>)
     }
 
     var listener: Listener? = null
@@ -186,6 +190,7 @@ class LightKeyboardView @JvmOverloads constructor(
 
         keyLayout = Prefs.keyLayout(context)
         autoPeriod = Prefs.autoPeriod(context)
+        glideEnabled = Prefs.glideTyping(context)
         hiddenKeys.clear()
         if (!Prefs.voiceEnabled(context)) hiddenKeys.add(Key.MIC)
         if (!Prefs.emojiKey(context)) hiddenKeys.add(Key.EMOJI)
@@ -211,6 +216,13 @@ class LightKeyboardView @JvmOverloads constructor(
     private var firstPointerId = -1
     private var firstKeyRetractable = false   // did the gesture's first tap commit a retractable char?
     private var dismissedThisGesture = false
+
+    // --- swipe (glide) typing ---
+    private var glideEnabled = true               // cached from prefs in applyPrefs()
+    private var gliding = false                    // this gesture has been classified as a glide
+    private var glideDownKey: PlacedKey? = null    // the letter the gesture started on (glide-eligible)
+    private val gestureX = ArrayList<Float>()
+    private val gestureY = ArrayList<Float>()
 
     init {
         setBackgroundColor(Color.BLACK)
@@ -362,6 +374,7 @@ class LightKeyboardView @JvmOverloads constructor(
             }
             drawKey(canvas, pk)
         }
+        if (gliding) drawTrail(canvas)
     }
 
     /** The voice-dictation surface: a big centered mic, the live status/partial text, and a hint. */
@@ -474,30 +487,52 @@ class LightKeyboardView @JvmOverloads constructor(
                 downX = ev.x
                 downY = ev.y
                 dismissedThisGesture = false
+                gliding = false
+                gestureX.clear(); gestureY.clear()
+                glideDownKey = null
                 firstPointerId = ev.getPointerId(0)
                 firstKeyRetractable = pressDown(firstPointerId, ev.x, ev.y)
+                // A gesture that starts on a letter is glide-eligible; seed the path with the down point.
+                if (glideEnabled && layer == Layer.LETTERS) {
+                    val k = findKey(ev.x, ev.y)
+                    if (k != null && isLetter(k.id)) { glideDownKey = k; gestureX.add(ev.x); gestureY.add(ev.y) }
+                }
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                val idx = ev.actionIndex
-                pressDown(ev.getPointerId(idx), ev.getX(idx), ev.getY(idx))
+                if (!gliding) {                          // a glide is single-pointer; ignore extra fingers
+                    val idx = ev.actionIndex
+                    pressDown(ev.getPointerId(idx), ev.getX(idx), ev.getY(idx))
+                }
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (!dismissedThisGesture) {
-                    val idx = ev.findPointerIndex(firstPointerId)
-                    if (idx >= 0) {
-                        val dy = ev.getY(idx) - downY
-                        val dx = ev.getX(idx) - downX
+                val idx = ev.findPointerIndex(firstPointerId)
+                if (idx >= 0) {
+                    val mx = ev.getX(idx); val my = ev.getY(idx)
+                    if (gliding) {
+                        gestureX.add(mx); gestureY.add(my); invalidate()
+                    } else if (!dismissedThisGesture) {
+                        val dx = mx - downX; val dy = my - downY
                         if (dy > dpf(60) && dy > abs(dx) * 1.5f) {
+                            // Swipe down to dismiss. Retract the down-committed char so none is left behind.
                             dismissedThisGesture = true
                             stopBackspaceRepeat()
-                            // The first tap already committed a char on down; retract it so the swipe
-                            // doesn't leave a stray letter behind.
                             if (firstKeyRetractable) listener?.onBackspace()
-                            pressed.clear()
-                            invalidate()
-                            listener?.onDismiss()
+                            pressed.clear(); invalidate(); listener?.onDismiss()
+                        } else if (glideDownKey != null) {
+                            gestureX.add(mx); gestureY.add(my)
+                            if (hypot(dx, dy) > glideStartDist()) {
+                                val cur = findKey(mx, my)
+                                if (cur != null && isLetter(cur.id) && cur.id != glideDownKey!!.id) {
+                                    // Crossed onto another letter → it's a glide. Retract the down tap and
+                                    // take over the gesture; the dismiss check is now suppressed.
+                                    gliding = true
+                                    stopBackspaceRepeat()
+                                    if (firstKeyRetractable) listener?.onBackspace()
+                                    pressed.clear(); invalidate()
+                                }
+                            }
                         }
                     }
                 }
@@ -511,6 +546,10 @@ class LightKeyboardView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (gliding && ev.actionMasked == MotionEvent.ACTION_UP) finishGlide()
+                gliding = false
+                glideDownKey = null
+                gestureX.clear(); gestureY.clear()
                 pressed.clear()
                 stopBackspaceRepeat()
                 invalidate()
@@ -549,6 +588,100 @@ class LightKeyboardView @JvmOverloads constructor(
         val cy = y.coerceIn(0f, height - 1f)
         placed.firstOrNull { it.hit.contains(cx, cy) }?.let { return it }
         return placed.minByOrNull { val dx = it.cx - cx; val dy = it.cy - cy; dx * dx + dy * dy }
+    }
+
+    // ------------------------------------------------------------------ swipe (glide) typing
+
+    private val swipeDecoder: SwipeDecoder? by lazy { loadSwipeDecoder() }
+
+    private fun loadSwipeDecoder(): SwipeDecoder? = try {
+        val words = readLexicon()
+        SwipeDecoder(words, bigram = readBigram(words))
+    } catch (e: Exception) {
+        null   // fall back to tap-only if the assets are missing/corrupt
+    }
+
+    /** lexicon.bin: int32 count, then per word { uint8 len, ASCII bytes, float32 logFreq }. */
+    private fun readLexicon(): List<SwipeDecoder.Word> {
+        val bb = ByteBuffer.wrap(resources.openRawResource(R.raw.lexicon).use { it.readBytes() })
+            .order(ByteOrder.LITTLE_ENDIAN)
+        return List(bb.int) {
+            val chars = ByteArray(bb.get().toInt() and 0xFF)
+            bb.get(chars)
+            SwipeDecoder.Word(String(chars, Charsets.US_ASCII), bb.float)
+        }
+    }
+
+    /** bigram.bin: int32 count, then per pair { int32 idx1, int32 idx2, float32 pmi } into [words]. */
+    private fun readBigram(words: List<SwipeDecoder.Word>): Bigram {
+        val bb = ByteBuffer.wrap(resources.openRawResource(R.raw.bigram).use { it.readBytes() })
+            .order(ByteOrder.LITTLE_ENDIAN)
+        val byPrev = HashMap<String, HashMap<String, Float>>()
+        repeat(bb.int) {
+            val i1 = bb.int; val i2 = bb.int; val pmi = bb.float
+            if (i1 in words.indices && i2 in words.indices) {
+                byPrev.getOrPut(words[i1].text) { HashMap() }[words[i2].text] = pmi
+            }
+        }
+        return Bigram(byPrev)
+    }
+
+    /** Distance (px) the finger must travel onto another letter before a tap becomes a glide. */
+    private fun glideStartDist(): Float = 0.5f * (glideDownKey?.vis?.width() ?: dpf(40))
+
+    /** Decode the captured glide path, then hand the candidates (best first) to the host to commit. */
+    private fun finishGlide() {
+        val dec = swipeDecoder ?: return
+        if (gestureX.size < 2 || !setSwipeGeometry(dec)) return
+        dec.setContext(previousWord())
+        val cands = dec.decode(gestureX.toFloatArray(), gestureY.toFloatArray(), 4)
+        if (cands.isEmpty()) {
+            glideDownKey?.let { listener?.onText(labelFor(it.id)) }   // too short to decode — treat as a tap
+            return
+        }
+        listener?.onSwipeWord(cands.map { caseWord(it) })
+    }
+
+    /** Feed the decoder the live letter-key centres (they shift with layout / compact mode). */
+    private fun setSwipeGeometry(dec: SwipeDecoder): Boolean {
+        if (letterKeys.isEmpty()) return false
+        val x = FloatArray(26); val y = FloatArray(26); var w = 0f; var n = 0
+        for (k in letterKeys) {
+            val c = k.id[0] - 'a'
+            if (c in 0..25) { x[c] = k.cx; y[c] = k.cy; w += k.vis.width(); n++ }
+        }
+        if (n == 0) return false
+        dec.setGeometry(x, y, w / n)
+        return true
+    }
+
+    /** The completed word before the cursor, for bigram context (null if none). */
+    private fun previousWord(): String? {
+        val before = listener?.textBeforeCursor(48)?.toString()?.trimEnd() ?: return null
+        val w = before.substring(before.lastIndexOf(' ') + 1).filter { it.isLetter() }
+        return w.ifEmpty { null }
+    }
+
+    /** Match a decoded (lowercase) word to the current shift state. */
+    private fun caseWord(w: String): String = when {
+        capsLock -> w.uppercase()
+        shifted -> w.replaceFirstChar { it.uppercase() }
+        else -> w
+    }
+
+    private val trailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = dpf(4); strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+        alpha = 160
+    }
+
+    private fun drawTrail(canvas: Canvas) {
+        if (gestureX.size < 2) return
+        val path = Path()
+        path.moveTo(gestureX[0], gestureY[0])
+        for (i in 1 until gestureX.size) path.lineTo(gestureX[i], gestureY[i])
+        canvas.drawPath(path, trailPaint)
     }
 
     // ------------------------------------------------------------------ typing accuracy
@@ -757,6 +890,7 @@ class LightKeyboardView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         loadLearnedOffsets()   // safe here: construction is complete, so the offset fields exist
+        if (glideEnabled) Thread { swipeDecoder }.start()   // warm the lexicon/bigram off the main thread
     }
 
     override fun onDetachedFromWindow() {

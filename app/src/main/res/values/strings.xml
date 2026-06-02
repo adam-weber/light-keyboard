@@ -6,6 +6,7 @@
     <string name="setup_step1">1. Enable Light Keyboard</string>
     <string name="setup_step2">2. Choose it as your keyboard</string>
     <string name="setup_autocorrect">Autocorrect</string>
+    <string name="setup_glide">Glide typing</string>
     <string name="setup_autocap">Auto-Capitalize</string>
     <string name="setup_autoperiod">Auto-Period</string>
     <string name="setup_layout">Keyboard layout</string>

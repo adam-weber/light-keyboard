@@ -237,6 +237,16 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         requestHideSelf(0) // swipe-down closes the keyboard, the proper Android way
     }
 
+    /** A glide decoded to [candidates] (best first); commit the top word with sensible spacing. */
+    override fun onSwipeWord(candidates: List<String>) {
+        val ic = currentInputConnection ?: return
+        val word = candidates.firstOrNull() ?: return
+        clearUndo()
+        val before = ic.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+        val lead = if (before.isNotEmpty() && !before.last().isWhitespace()) " " else ""
+        ic.commitText(lead + word + " ", 1)
+    }
+
     // Never take over the whole screen with the big white "extract" editor (it appears in landscape by
     // default). Our keyboard is built for the compact LightOS layout, so keep it docked at the bottom.
     override fun onEvaluateFullscreenMode(): Boolean = false

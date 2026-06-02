@@ -108,6 +108,9 @@ class SetupActivity : AppCompatActivity() {
         val autocorrectToggle = toggle(R.string.setup_autocorrect, Prefs.autocorrect(this)) {
             Prefs.setAutocorrect(this, it)
         }
+        val glideToggle = toggle(R.string.setup_glide, Prefs.glideTyping(this)) {
+            Prefs.setGlideTyping(this, it)
+        }
         val autocapToggle = toggle(R.string.setup_autocap, Prefs.autoCapitalize(this)) {
             Prefs.setAutoCapitalize(this, it)
         }
@@ -161,7 +164,7 @@ class SetupActivity : AppCompatActivity() {
 
         listOf(
             titleView, blurbView, s1.row, s2.row,
-            autocorrectToggle, autocapToggle, autoperiodToggle, returnToggle, emojiToggle,
+            autocorrectToggle, glideToggle, autocapToggle, autoperiodToggle, returnToggle, emojiToggle,
             voiceRow, voiceStatus!!, compactToggle,
             layoutRow,
         ).forEach { root.addView(it) }
