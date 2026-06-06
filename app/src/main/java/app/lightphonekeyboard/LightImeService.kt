@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
+import android.text.InputType
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.textservice.SentenceSuggestionsInfo
@@ -61,7 +62,12 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        keyboard?.reset()
+        // Number / phone / date fields open on the numbers layer; text fields on letters.
+        val cls = info?.inputType?.and(InputType.TYPE_MASK_CLASS) ?: 0
+        val numeric = cls == InputType.TYPE_CLASS_NUMBER ||
+            cls == InputType.TYPE_CLASS_PHONE ||
+            cls == InputType.TYPE_CLASS_DATETIME
+        keyboard?.reset(numeric)
         micActive = false
         dictation.destroy()
         corrections.clear()
