@@ -742,14 +742,16 @@ class LightKeyboardView @JvmOverloads constructor(
         lastShiftTapMs = now
     }
 
-    /** Reset to the default letters view (called when a new field gains focus). Also re-reads prefs,
-     *  so toggling compact / layout / key visibility in settings takes effect next time the keyboard
-     *  opens. Initial uppercase follows Auto-Capitalize (the IME's updateShift refines it immediately). */
-    fun reset() {
+    /** Reset for a newly focused field: open on letters, or the numbers layer when [numeric] (number /
+     *  phone / date fields). Also re-reads prefs, so toggling compact / layout / key visibility in
+     *  settings takes effect next time the keyboard opens. Initial uppercase follows Auto-Capitalize
+     *  (the IME's updateShift refines it immediately). */
+    fun reset(numeric: Boolean = false) {
         stopBackspaceRepeat()
         saveLearnedOffsets()   // persist what we learned in the field we're leaving
         applyPrefs()
-        layer = Layer.LETTERS
+        // Number / phone / date fields open straight on the symbols layer (its top row is 1-0).
+        layer = if (numeric) Layer.SYMBOLS else Layer.LETTERS
         shifted = Prefs.autoCapitalize(context)
         capsLock = false; listening = false; rebuild()
     }
