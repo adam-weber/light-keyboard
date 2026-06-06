@@ -11,8 +11,13 @@ android {
         applicationId 'app.lightphonekeyboard'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        // CI derives these from the pushed Git tag (see .github/workflows/release.yml) so the APK's
+        // embedded versionName always equals the GitHub release tag. Otherwise Obtainium compares the
+        // tag against the stale embedded version and shows a phantom "update available" forever —
+        // every v0.1.x release shipped embedded as 0.1.0, which is exactly that bug. The literals
+        // below are only the fallback for local/debug builds, which have no tag.
+        versionCode ((project.findProperty('appVersionCode') ?: '1').toString().toInteger())
+        versionName (project.findProperty('appVersionName') ?: '0.1.0')
         resConfigs "en"
 
         // Light Phone 3 is arm64 — ship only its native libs (Vosk .so) to keep the APK small.
