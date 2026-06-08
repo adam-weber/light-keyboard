@@ -52,7 +52,7 @@ class VoiceDictation(private val context: Context) {
         val m = model
         if (m == null) {
             prepare()
-            onError(if (VoiceModel.isInstalled(context)) "Loading voice…" else "Voice not downloaded")
+            onError(context.getString(if (VoiceModel.isInstalled(context)) R.string.kb_voice_loading else R.string.kb_voice_not_downloaded))
             return
         }
         destroy()
@@ -73,12 +73,12 @@ class VoiceDictation(private val context: Context) {
                 override fun onFinalResult(hypothesis: String?) {
                     field(hypothesis, "text")?.let { if (it.isNotBlank()) onSegment(it) }
                 }
-                override fun onError(e: Exception?) { onError("Voice error.") }
+                override fun onError(e: Exception?) { onError(context.getString(R.string.kb_voice_error)) }
                 override fun onTimeout() {}
             })
         } catch (e: Throwable) {
             Log.e(TAG, "listen failed", e)
-            onError("Voice error."); destroy()
+            onError(context.getString(R.string.kb_voice_error)); destroy()
         }
     }
 

@@ -39,8 +39,6 @@ A few optional settings sit below:
 - **Voice dictation** (off by default): turning it on downloads a ~40 MB offline speech-to-text model
   (Vosk) once, then a mic key lets you speak instead of type, entirely on-device. Once downloaded, a
   **Delete model** link appears beside the toggle to reclaim the space.
-- **Compact keyboard** (off by default): shorter keys and tighter spacing, so the keyboard takes up
-  less of the screen.
 - **Keyboard layout**: choose QWERTY, AZERTY, or QWERTZ.
 
 Layout / appearance changes take effect the next time the keyboard opens. That is the whole setup.

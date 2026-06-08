@@ -9,7 +9,7 @@
     <string name="setup_autocap">Auto-Capitalize</string>
     <string name="setup_autoperiod">Auto-Period</string>
     <string name="setup_layout">Keyboard layout</string>
-    <string name="setup_compact">Compact keyboard</string>
+    <string name="setup_height">Keyboard height</string>
     <string name="setup_returnkey">Return key</string>
     <string name="setup_emojikey">Emoji keyboard</string>
     <string name="layout_title">Keyboard layout</string>
@@ -17,4 +17,13 @@
     <string name="setup_voice">Voice dictation</string>
     <string name="setup_voice_dl">(40MB download)</string>
     <string name="setup_voice_clear">Delete model</string>
+    <string name="setup_voice_loading">Downloading voice model…</string>
+    <string name="setup_voice_error">Download failed: %1$s</string>
+    <string name="kb_listening_done">Tap when done</string>
+    <string name="kb_voice_unavailable">Voice unavailable</string>
+    <string name="kb_voice_preparing">Preparing voice…</string>
+    <string name="kb_listening">Listening…</string>
+    <string name="kb_voice_loading">Loading voice…</string>
+    <string name="kb_voice_not_downloaded">Voice not downloaded</string>
+    <string name="kb_voice_error">Voice error.</string>
 </resources>

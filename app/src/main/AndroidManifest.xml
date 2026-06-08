@@ -56,5 +56,11 @@
             android:name=".KeyboardLayoutActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
+
+        <!-- Keyboard height picker, opened from setup. -->
+        <activity
+            android:name=".KeyboardHeightActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
     </application>
 </manifest>

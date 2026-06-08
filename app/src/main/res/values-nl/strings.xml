@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Light Keyboard</string>
+    <string name="setup_title">Light Keyboard</string>
+    <string name="setup_blurb">Een minimaal zwart-wit toetsenbord.</string>
+    <string name="setup_step1">1. Schakel Light Keyboard in</string>
+    <string name="setup_step2">2. Kies het als je toetsenbord</string>
+    <string name="setup_autocorrect">Autocorrectie</string>
+    <string name="setup_autocap">Automatisch hoofdletters</string>
+    <string name="setup_autoperiod">Automatische punt</string>
+    <string name="setup_layout">Toetsenbordindeling</string>
+    <string name="setup_height">Toetsenbordhoogte</string>
+    <string name="setup_returnkey">Enter-toets</string>
+    <string name="setup_emojikey">Emoji-toetsenbord</string>
+    <string name="layout_title">Toetsenbordindeling</string>
+    <string name="layout_back">← Terug</string>
+    <string name="setup_voice">Spraakinvoer</string>
+    <string name="setup_voice_dl">(40MB download)</string>
+    <string name="setup_voice_clear">Model verwijderen</string>
+    <string name="setup_voice_loading">Spraakmodel downloaden…</string>
+    <string name="setup_voice_error">Download mislukt: %1$s</string>
+    <string name="kb_listening_done">Tik wanneer klaar</string>
+    <string name="kb_voice_unavailable">Spraak niet beschikbaar</string>
+    <string name="kb_voice_preparing">Spraak voorbereiden…</string>
+    <string name="kb_listening">Luisteren…</string>
+    <string name="kb_voice_loading">Spraak laden…</string>
+    <string name="kb_voice_not_downloaded">Spraak niet gedownload</string>
+    <string name="kb_voice_error">Spraakfout.</string>
+</resources>

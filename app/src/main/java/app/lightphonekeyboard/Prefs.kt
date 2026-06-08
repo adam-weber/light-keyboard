@@ -7,13 +7,13 @@ object Prefs {
     private const val FILE = "light_keyboard_prefs"
     private const val KEY_AUTOCORRECT = "autocorrect"
     private const val KEY_VOICE = "voice_enabled"
-    private const val KEY_COMPACT = "compact_mode"
     private const val KEY_AUTO_PERIOD = "auto_period"
     private const val KEY_AUTO_CAP = "auto_capitalize"
     private const val KEY_RETURN_KEY = "return_key"
     private const val KEY_EMOJI_KEY = "emoji_key"
     private const val KEY_TOUCH_OFFSETS = "touch_offsets"
     private const val KEY_LAYOUT = "key_layout"
+    private const val KEY_HEIGHT = "keyboard_height"
 
     /** Keyboard letter arrangements; the stored value of [keyLayout]. */
     const val LAYOUT_QWERTY = "qwerty"
@@ -27,12 +27,6 @@ object Prefs {
 
     fun setAutocorrect(c: Context, value: Boolean) =
         prefs(c).edit().putBoolean(KEY_AUTOCORRECT, value).apply()
-
-    /** Compact layout: tighter gutters and shorter keys, to reclaim screen space. Off by default. */
-    fun compactMode(c: Context): Boolean = prefs(c).getBoolean(KEY_COMPACT, false)
-
-    fun setCompactMode(c: Context, value: Boolean) =
-        prefs(c).edit().putBoolean(KEY_COMPACT, value).apply()
 
     /** Double-tap the space bar to insert ". " (period + space). On by default. */
     fun autoPeriod(c: Context): Boolean = prefs(c).getBoolean(KEY_AUTO_PERIOD, true)
@@ -70,6 +64,12 @@ object Prefs {
 
     fun setKeyLayout(c: Context, value: String) =
         prefs(c).edit().putString(KEY_LAYOUT, value).apply()
+
+    /** Keyboard height percentage (60-100). Default is 100. */
+    fun heightPercent(c: Context): Int = prefs(c).getInt(KEY_HEIGHT, 100)
+
+    fun setHeightPercent(c: Context, value: Int) =
+        prefs(c).edit().putInt(KEY_HEIGHT, value).apply()
 
     /** Voice dictation (mic key + offline STT). Off by default; turning it on downloads the model. */
     fun voiceEnabled(c: Context): Boolean = prefs(c).getBoolean(KEY_VOICE, false)
