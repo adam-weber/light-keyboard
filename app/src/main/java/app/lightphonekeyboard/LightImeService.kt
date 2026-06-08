@@ -288,11 +288,11 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
         dictation.prepare()
         if (attempts > 40) {   // ~12s; first-run model unpack should be done well before this
             micActive = false
-            kb.setListeningStatus("Voice unavailable")
+            kb.setListeningStatus(getString(R.string.kb_voice_unavailable))
             kb.postDelayed({ kb.stopListeningUi() }, 1200)
             return
         }
-        kb.setListeningStatus("Preparing voice…")
+        kb.setListeningStatus(getString(R.string.kb_voice_preparing))
         kb.postDelayed({ startDictationWhenReady(kb, attempts + 1) }, 300)
     }
 

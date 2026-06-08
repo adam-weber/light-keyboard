@@ -27,6 +27,7 @@ class SetupActivity : AppCompatActivity() {
     private var voiceStatus: TextView? = null
     private var voiceAccessory: TextView? = null
     private var layoutValue: TextView? = null
+    private var heightValue: TextView? = null
     private var step1: Step? = null
     private var step2: Step? = null
 
@@ -120,9 +121,6 @@ class SetupActivity : AppCompatActivity() {
         val emojiToggle = toggle(R.string.setup_emojikey, Prefs.emojiKey(this)) {
             Prefs.setEmojiKey(this, it)
         }
-        val compactToggle = toggle(R.string.setup_compact, Prefs.compactMode(this)) {
-            Prefs.setCompactMode(this, it)
-        }
 
         // Voice dictation row. The toggle keeps its normal padding so the row is exactly as tall as
         // every other toggle; the accessory (right) is a sibling view — tapping it doesn't flip the
@@ -159,14 +157,32 @@ class SetupActivity : AppCompatActivity() {
             }
         }
 
+        // Keyboard height — similar to layout picker.
+        val heightRow = run {
+            val title = label(getString(R.string.setup_height), 20f, R.color.white).apply { setPadding(0, 0, 0, 0) }
+            heightValue = label("", 14f, R.color.gray).apply { setPadding(0, 0, 0, 0) }
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, pad, 0, 0)
+                isClickable = true
+                setOnClickListener {
+                    startActivity(Intent(this@SetupActivity, KeyboardHeightActivity::class.java))
+                }
+                addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(heightValue)
+            }
+        }
+
         listOf(
             titleView, blurbView, s1.row, s2.row,
             autocorrectToggle, autocapToggle, autoperiodToggle, returnToggle, emojiToggle,
-            voiceRow, voiceStatus!!, compactToggle,
-            layoutRow,
+            voiceRow, voiceStatus!!,
+            layoutRow, heightRow,
         ).forEach { root.addView(it) }
         refreshVoice()
         refreshLayout()
+        refreshHeight()
         refreshSetupState()
 
         // Scrollable: in portrait the setup content is taller than the Light Phone screen.
@@ -179,6 +195,7 @@ class SetupActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshLayout()       // reflect a layout chosen on the picker page
+        refreshHeight()
         refreshSetupState()   // steps may have been completed over in system settings
         contentResolver.registerContentObserver(
             Settings.Secure.getUriFor(Settings.Secure.DEFAULT_INPUT_METHOD), false, imeObserver,
@@ -232,6 +249,10 @@ class SetupActivity : AppCompatActivity() {
         layoutValue?.text = layoutName(Prefs.keyLayout(this))
     }
 
+    private fun refreshHeight() {
+        heightValue?.text = "${Prefs.heightPercent(this)}%"
+    }
+
     private fun layoutName(key: String): String = when (key) {
         Prefs.LAYOUT_AZERTY -> "AZERTY"
         Prefs.LAYOUT_QWERTZ -> "QWERTZ"
@@ -251,10 +272,10 @@ class SetupActivity : AppCompatActivity() {
         }
         // Download the model first; only enable on success.
         voiceToggle?.isEnabled = false
-        setVoiceStatus("Downloading voice model…")
+        setVoiceStatus(getString(R.string.setup_voice_loading))
         VoiceModel.install(
             this,
-            onProgress = { p -> setVoiceStatus("Downloading voice model… $p%") },
+            onProgress = { p -> setVoiceStatus("${getString(R.string.setup_voice_loading)} $p%") },
             onDone = {
                 voiceToggle?.isEnabled = true
                 Prefs.setVoiceEnabled(this, true)
@@ -265,7 +286,7 @@ class SetupActivity : AppCompatActivity() {
                 voiceToggle?.isEnabled = true
                 Prefs.setVoiceEnabled(this, false)
                 voiceToggle?.isChecked = false
-                setVoiceStatus("Download failed: $msg")
+                setVoiceStatus(getString(R.string.setup_voice_error, msg))
                 refreshVoice()
             },
         )

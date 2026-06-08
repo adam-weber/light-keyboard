@@ -154,11 +154,9 @@ class LightKeyboardView @JvmOverloads constructor(
     private val letterKeys = ArrayList<PlacedKey>()   // a-z keys only, for the accuracy model
 
     // --- metrics (px), set by applyPrefs() for the active size mode ---
-    // Regular matches the LightOS keyboard; compact tightens the gutters and shortens the keys so the
-    // keyboard eats less of the small screen. The accuracy model is shared across both: its spatial
+    // Regular matches the LightOS keyboard. The accuracy model is shared across both: its spatial
     // term is normalised by the live key width / rowPitch (so it rescales itself), and its language
     // term (charmodel.bin) is geometry-independent — see the "typing accuracy" section below.
-    private var compact = false
     private var padTop = 0f
     private var padBottom = 0f
     private var padSide = 0f
@@ -172,16 +170,10 @@ class LightKeyboardView @JvmOverloads constructor(
     /** Cache all view-side prefs (size mode, layout, key visibility, Auto-Period). Idempotent;
      *  called on init and on every reset(), so settings changes take effect next time the keyboard opens. */
     private fun applyPrefs() {
-        compact = Prefs.compactMode(context)
-        if (compact) {
-            padTop = dpf(4); padBottom = dpf(5); padSide = dpf(4)
-            keyGap = dpf(2); rowKeyH = dpf(32)
-            keyTextSize = spf(20); labelTextSize = spf(15); emojiTextSize = spf(24)
-        } else {
-            padTop = dpf(8); padBottom = dpf(10); padSide = dpf(6)
-            keyGap = dpf(3); rowKeyH = dpf(48)
-            keyTextSize = spf(26); labelTextSize = spf(18); emojiTextSize = spf(30)
-        }
+        val heightFactor = Prefs.heightPercent(context) / 100f
+        padTop = dpf(8); padBottom = dpf(10); padSide = dpf(6)
+        keyGap = dpf(3); rowKeyH = dpf(48) * heightFactor
+        keyTextSize = spf(26); labelTextSize = spf(18); emojiTextSize = spf(30)
         rowPitch = rowKeyH + keyGap * 2
 
         keyLayout = Prefs.keyLayout(context)
@@ -378,7 +370,7 @@ class LightKeyboardView @JvmOverloads constructor(
         // Wrap the live text so a long phrase stacks into lines instead of running off the screen.
         drawWrappedCentered(canvas, listeningStatus, cx, midY + dpf(22), width - dpf(48), textPaint)
         textPaint.textSize = spf(12)
-        canvas.drawText("Tap when done", cx, height - dpf(18), textPaint)
+        canvas.drawText(context.getString(R.string.kb_listening_done), cx, height - dpf(18), textPaint)
     }
 
     /** Draw [text] centered on ([cx],[centerY]), wrapping at word boundaries to fit [maxWidth]. */
@@ -445,12 +437,12 @@ class LightKeyboardView @JvmOverloads constructor(
         else -> null
     }
 
-    // Icon inset inside its key. Compact keys are shorter, so the insets shrink too or the glyphs vanish.
+    // Icon inset inside its key.
     private fun padFor(id: String): Float = when (id) {
-        Key.SHIFT -> if (compact) dpf(6) else dpf(9)
-        Key.BACKSPACE, Key.EMOJI_BACK -> if (compact) dpf(7) else dpf(10)
-        Key.MIC -> if (compact) dpf(6) else dpf(9)
-        else -> if (compact) dpf(5) else dpf(7)
+        Key.SHIFT -> dpf(9)
+        Key.BACKSPACE, Key.EMOJI_BACK -> dpf(10)
+        Key.MIC -> dpf(9)
+        else -> dpf(7)
     }
 
     private fun labelFor(id: String): String =
@@ -562,7 +554,7 @@ class LightKeyboardView @JvmOverloads constructor(
     // Two refinements from the touch-modelling literature:
     //   - The spatial Gaussian width has a fixed finger-size floor (FFitts / dual-Gaussian model,
     //     Bi/Li/Zhai CHI'13): touch scatter = a size-proportional part PLUS a ~constant ≈finger-width
-    //     part. On small keys the floor dominates, so the short compact rows widen the spatial term on
+    //     part. On small keys the floor dominates, so the short rows widen the spatial term on
     //     their own and let the language model carry more of the tap — no per-mode tuning needed.
     //   - The touch point is shifted up by a *per-row* offset (the "perceived input point" parallax —
     //     Holz & Baudisch; per-row because finger pitch varies by row, Henze et al.) that is learned
@@ -622,7 +614,7 @@ class LightKeyboardView @JvmOverloads constructor(
         val model = charModel ?: return nearest
         val (c1, c2) = contextSymbols()
         // Per-axis Gaussian widths (key units): the size-proportional sigmaFrac combined in quadrature
-        // with the fixed sigmaAbs floor. The floor is a constant in px, so on the short compact rows it
+        // with the fixed sigmaAbs floor. The floor is a constant in px, so on the short rows it
         // grows as a fraction of the row pitch — widening the vertical term and ceding more to context.
         val twoSx2 = 2f * sigmaKeyUnits(kw).let { it * it }
         val twoSy2 = 2f * sigmaKeyUnits(rowPitch).let { it * it }
@@ -743,7 +735,7 @@ class LightKeyboardView @JvmOverloads constructor(
     }
 
     /** Reset for a newly focused field: open on letters, or the numbers layer when [numeric] (number /
-     *  phone / date fields). Also re-reads prefs, so toggling compact / layout / key visibility in
+     *  phone / date fields). Also re-reads prefs, so toggling layout / key visibility in
      *  settings takes effect next time the keyboard opens. Initial uppercase follows Auto-Capitalize
      *  (the IME's updateShift refines it immediately). */
     fun reset(numeric: Boolean = false) {
@@ -768,7 +760,7 @@ class LightKeyboardView @JvmOverloads constructor(
     }
 
     /** Enter the voice-dictation listening surface. */
-    fun startListeningUi() { listening = true; listeningStatus = "Listening…"; rebuild() }
+    fun startListeningUi() { listening = true; listeningStatus = context.getString(R.string.kb_listening); rebuild() }
 
     /** Update the listening status / live partial transcription. */
     fun setListeningStatus(text: String) {
