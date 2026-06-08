@@ -62,12 +62,18 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        // Number / phone / date fields open on the numbers layer; text fields on letters.
-        val cls = info?.inputType?.and(InputType.TYPE_MASK_CLASS) ?: 0
-        val numeric = cls == InputType.TYPE_CLASS_NUMBER ||
-            cls == InputType.TYPE_CLASS_PHONE ||
-            cls == InputType.TYPE_CLASS_DATETIME
-        keyboard?.reset(numeric)
+        // Only re-initialise the keyboard surface for a genuinely new field. restarting == true is the
+        // SAME field reconnecting — many apps call restartInput() after each committed character — so
+        // resetting here would snap a user who switched to the numbers/symbols layer back to letters
+        // mid-typing (the reported "type one number and it jumps back to ABC" bug).
+        if (!restarting) {
+            // Number / phone / date fields open on the numbers layer; text fields on letters.
+            val cls = info?.inputType?.and(InputType.TYPE_MASK_CLASS) ?: 0
+            val numeric = cls == InputType.TYPE_CLASS_NUMBER ||
+                cls == InputType.TYPE_CLASS_PHONE ||
+                cls == InputType.TYPE_CLASS_DATETIME
+            keyboard?.reset(numeric)
+        }
         micActive = false
         dictation.destroy()
         corrections.clear()
