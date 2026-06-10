@@ -10,6 +10,7 @@ import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -153,12 +154,14 @@ class LightKeyboardView @JvmOverloads constructor(
     private val placed = ArrayList<PlacedKey>()
     private val letterKeys = ArrayList<PlacedKey>()   // a-z keys only, for the accuracy model
 
-    // --- metrics (px), set by applyPrefs() for the active size mode ---
-    // Regular matches the LightOS keyboard; compact tightens the gutters and shortens the keys so the
-    // keyboard eats less of the small screen. The accuracy model is shared across both: its spatial
-    // term is normalised by the live key width / rowPitch (so it rescales itself), and its language
-    // term (charmodel.bin) is geometry-independent — see the "typing accuracy" section below.
-    private var compact = false
+    // --- metrics (px), set by applyPrefs() for the active height preset ---
+    // Medium matches the LightOS keyboard; Short tightens the gutters and shortens the keys, Tall does
+    // the opposite. The accuracy model is shared across all three: its spatial term is normalised by the
+    // live key width / rowPitch (so it rescales itself), and its language term (charmodel.bin) is
+    // geometry-independent — see the "typing accuracy" section below. Only the px-stored learned vertical
+    // offsets are height-specific, so applyPrefs() resets them when the preset changes.
+    private var compact = false                 // derived: true on Short (tighter control-key icon insets)
+    private var appliedHeight: String? = null   // last preset applyPrefs() ran for, to detect a change
     private var padTop = 0f
     private var padBottom = 0f
     private var padSide = 0f
@@ -172,15 +175,32 @@ class LightKeyboardView @JvmOverloads constructor(
     /** Cache all view-side prefs (size mode, layout, key visibility, Auto-Period). Idempotent;
      *  called on init and on every reset(), so settings changes take effect next time the keyboard opens. */
     private fun applyPrefs() {
-        compact = Prefs.compactMode(context)
-        if (compact) {
-            padTop = dpf(4); padBottom = dpf(5); padSide = dpf(4)
-            keyGap = dpf(2); rowKeyH = dpf(32)
-            keyTextSize = spf(20); labelTextSize = spf(15); emojiTextSize = spf(24)
-        } else {
-            padTop = dpf(8); padBottom = dpf(10); padSide = dpf(6)
-            keyGap = dpf(3); rowKeyH = dpf(48)
-            keyTextSize = spf(26); labelTextSize = spf(18); emojiTextSize = spf(30)
+        val height = Prefs.keyHeight(context)
+        // A height change makes the px-stored learned offsets stale, so reset them to the prior. Guarded
+        // on appliedHeight != null because the first applyPrefs() runs from init{}, before learnedBiasY /
+        // rowBiasPrior (declared lower in the file) are initialized.
+        if (appliedHeight != null && appliedHeight != height) {
+            for (i in learnedBiasY.indices) learnedBiasY[i] = rowBiasPrior[i]
+            Prefs.setTouchOffsets(context, "")
+        }
+        appliedHeight = height
+        compact = height == Prefs.HEIGHT_SHORT
+        when (height) {
+            Prefs.HEIGHT_SHORT -> {
+                padTop = dpf(4); padBottom = dpf(5); padSide = dpf(4)
+                keyGap = dpf(2); rowKeyH = dpf(32)
+                keyTextSize = spf(20); labelTextSize = spf(15); emojiTextSize = spf(24)
+            }
+            Prefs.HEIGHT_TALL -> {
+                padTop = dpf(10); padBottom = dpf(12); padSide = dpf(6)
+                keyGap = dpf(3); rowKeyH = dpf(58)
+                keyTextSize = spf(30); labelTextSize = spf(20); emojiTextSize = spf(32)
+            }
+            else -> {   // HEIGHT_MEDIUM (default)
+                padTop = dpf(8); padBottom = dpf(10); padSide = dpf(6)
+                keyGap = dpf(3); rowKeyH = dpf(48)
+                keyTextSize = spf(26); labelTextSize = spf(18); emojiTextSize = spf(30)
+            }
         }
         rowPitch = rowKeyH + keyGap * 2
 
@@ -211,6 +231,7 @@ class LightKeyboardView @JvmOverloads constructor(
     private var firstPointerId = -1
     private var firstKeyRetractable = false   // did the gesture's first tap commit a retractable char?
     private var dismissedThisGesture = false
+    private var velocityTracker: VelocityTracker? = null   // for early swipe-down (dismiss) detection
 
     init {
         setBackgroundColor(Color.BLACK)
@@ -475,6 +496,8 @@ class LightKeyboardView @JvmOverloads constructor(
                 downY = ev.y
                 dismissedThisGesture = false
                 firstPointerId = ev.getPointerId(0)
+                velocityTracker?.recycle()
+                velocityTracker = VelocityTracker.obtain().apply { addMovement(ev) }
                 firstKeyRetractable = pressDown(firstPointerId, ev.x, ev.y)
             }
 
@@ -484,12 +507,20 @@ class LightKeyboardView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_MOVE -> {
+                velocityTracker?.addMovement(ev)
                 if (!dismissedThisGesture) {
                     val idx = ev.findPointerIndex(firstPointerId)
                     if (idx >= 0) {
                         val dy = ev.getY(idx) - downY
                         val dx = ev.getX(idx) - downX
-                        if (dy > dpf(60) && dy > abs(dx) * 1.5f) {
+                        velocityTracker?.computeCurrentVelocity(1000)
+                        val vy = velocityTracker?.getYVelocity(firstPointerId) ?: 0f
+                        // Recognise the dismiss swipe as early as possible so the char committed on
+                        // key-down is retracted almost immediately, instead of lingering as a flash of a
+                        // letter: a short downward drag (30dp) OR a quick downward flick both count, as
+                        // long as the motion is clearly vertical.
+                        val verticalDrag = dy > abs(dx) * 1.5f
+                        if (verticalDrag && (dy > dpf(30) || (vy > dpf(900) && dy > dpf(14)))) {
                             dismissedThisGesture = true
                             stopBackspaceRepeat()
                             // The first tap already committed a char on down; retract it so the swipe
@@ -513,6 +544,8 @@ class LightKeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 pressed.clear()
                 stopBackspaceRepeat()
+                velocityTracker?.recycle()
+                velocityTracker = null
                 invalidate()
             }
         }

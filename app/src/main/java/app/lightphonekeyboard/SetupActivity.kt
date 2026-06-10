@@ -7,13 +7,17 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 /**
  * Minimal two-step setup: enable the keyboard in system settings, then pick it. Pure B/W, text-first,
@@ -27,6 +31,7 @@ class SetupActivity : AppCompatActivity() {
     private var voiceStatus: TextView? = null
     private var voiceAccessory: TextView? = null
     private var layoutValue: TextView? = null
+    private var heightValue: TextView? = null
     private var step1: Step? = null
     private var step2: Step? = null
 
@@ -120,9 +125,6 @@ class SetupActivity : AppCompatActivity() {
         val emojiToggle = toggle(R.string.setup_emojikey, Prefs.emojiKey(this)) {
             Prefs.setEmojiKey(this, it)
         }
-        val compactToggle = toggle(R.string.setup_compact, Prefs.compactMode(this)) {
-            Prefs.setCompactMode(this, it)
-        }
 
         // Voice dictation row. The toggle keeps its normal padding so the row is exactly as tall as
         // every other toggle; the accessory (right) is a sibling view — tapping it doesn't flip the
@@ -159,14 +161,80 @@ class SetupActivity : AppCompatActivity() {
             }
         }
 
+        // Keyboard height — same one-line picker pattern as layout: title left, current preset right.
+        val heightRow = run {
+            val title = label(getString(R.string.setup_height), 20f, R.color.white).apply { setPadding(0, 0, 0, 0) }
+            heightValue = label("", 14f, R.color.gray).apply { setPadding(0, 0, 0, 0) }
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, pad, 0, 0)   // top gap matching the spacing between toggles
+                isClickable = true
+                setOnClickListener {
+                    startActivity(Intent(this@SetupActivity, KeyboardHeightActivity::class.java))
+                }
+                addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(heightValue)
+            }
+        }
+
+        // "Try the keyboard" — a compact toggle row, not a boxed input: tap to pop the keyboard up and
+        // feel the current height / layout / accuracy; tap the chevron (or the keyboard's own hide key)
+        // to close. Last in the list so the keyboard never covers another setting. If Light isn't the
+        // selected keyboard yet, the system's current one shows instead — a hint that step 2 isn't done.
+        val tryField = EditText(this).apply {
+            hint = getString(R.string.setup_try)
+            setHintTextColor(getColor(R.color.gray))
+            setTextColor(getColor(R.color.white))
+            textSize = 20f
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            background = null
+            setPadding(0, 0, 0, 0)
+        }
+        val tryChevron = TextView(this).apply {
+            text = "▾"
+            setTextColor(getColor(R.color.gray))
+            textSize = 20f
+            setPadding(pad / 2, 0, 0, 0)
+        }
+        val tryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, pad, 0, pad)
+            addView(tryField, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(tryChevron)
+        }
+        // Tapping the field opens the keyboard the usual way (focus → IME). The chevron is an explicit
+        // open/close driven by the live IME state, so it's correct however the keyboard was dismissed.
+        val imm = getSystemService(InputMethodManager::class.java)
+        var imeUp = false
+        tryChevron.setOnClickListener {
+            if (imeUp) {
+                imm?.hideSoftInputFromWindow(tryField.windowToken, 0)
+                tryField.clearFocus()
+            } else {
+                tryField.requestFocus()
+                imm?.showSoftInput(tryField, 0)
+            }
+        }
+
         listOf(
             titleView, blurbView, s1.row, s2.row,
             autocorrectToggle, autocapToggle, autoperiodToggle, returnToggle, emojiToggle,
-            voiceRow, voiceStatus!!, compactToggle,
-            layoutRow,
+            voiceRow, voiceStatus!!,
+            layoutRow, heightRow, tryRow,
         ).forEach { root.addView(it) }
+
+        // Reflect the keyboard's real state on the chevron (▴ open / ▾ closed), however it's toggled.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            imeUp = insets.isVisible(WindowInsetsCompat.Type.ime())
+            tryChevron.text = if (imeUp) "▴" else "▾"
+            insets
+        }
         refreshVoice()
         refreshLayout()
+        refreshHeight()
         refreshSetupState()
 
         // Scrollable: in portrait the setup content is taller than the Light Phone screen.
@@ -179,6 +247,7 @@ class SetupActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshLayout()       // reflect a layout chosen on the picker page
+        refreshHeight()       // reflect a height chosen on the picker page
         refreshSetupState()   // steps may have been completed over in system settings
         contentResolver.registerContentObserver(
             Settings.Secure.getUriFor(Settings.Secure.DEFAULT_INPUT_METHOD), false, imeObserver,
@@ -236,6 +305,17 @@ class SetupActivity : AppCompatActivity() {
         Prefs.LAYOUT_AZERTY -> "AZERTY"
         Prefs.LAYOUT_QWERTZ -> "QWERTZ"
         else -> "QWERTY"
+    }
+
+    /** Update the current-height name shown on the keyboard-height row. */
+    private fun refreshHeight() {
+        heightValue?.text = heightName(Prefs.keyHeight(this))
+    }
+
+    private fun heightName(key: String): String = when (key) {
+        Prefs.HEIGHT_SHORT -> getString(R.string.height_short)
+        Prefs.HEIGHT_TALL -> getString(R.string.height_tall)
+        else -> getString(R.string.height_medium)
     }
 
     private fun onVoiceToggle(on: Boolean) {
