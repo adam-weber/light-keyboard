@@ -184,19 +184,29 @@ class LightKeyboardView @JvmOverloads constructor(
             Prefs.setTouchOffsets(context, "")
         }
         appliedHeight = height
-        compact = height == Prefs.HEIGHT_SHORT
+        compact = height == Prefs.HEIGHT_SHORTEST
         when (height) {
-            Prefs.HEIGHT_SHORT -> {
+            Prefs.HEIGHT_SHORTEST -> {
                 padTop = dpf(4); padBottom = dpf(5); padSide = dpf(4)
                 keyGap = dpf(2); rowKeyH = dpf(32)
                 keyTextSize = spf(20); labelTextSize = spf(15); emojiTextSize = spf(24)
             }
-            Prefs.HEIGHT_TALL -> {
-                padTop = dpf(10); padBottom = dpf(12); padSide = dpf(6)
-                keyGap = dpf(3); rowKeyH = dpf(58)
-                keyTextSize = spf(30); labelTextSize = spf(20); emojiTextSize = spf(32)
+            Prefs.HEIGHT_SHORT -> {
+                padTop = dpf(6); padBottom = dpf(8); padSide = dpf(5)
+                keyGap = dpf(3); rowKeyH = dpf(40)
+                keyTextSize = spf(23); labelTextSize = spf(16); emojiTextSize = spf(27)
             }
-            else -> {   // HEIGHT_MEDIUM (default)
+            Prefs.HEIGHT_TALL -> {
+                padTop = dpf(9); padBottom = dpf(11); padSide = dpf(6)
+                keyGap = dpf(3); rowKeyH = dpf(56)
+                keyTextSize = spf(29); labelTextSize = spf(19); emojiTextSize = spf(31)
+            }
+            Prefs.HEIGHT_TALLEST -> {
+                padTop = dpf(11); padBottom = dpf(13); padSide = dpf(6)
+                keyGap = dpf(3); rowKeyH = dpf(64)
+                keyTextSize = spf(32); labelTextSize = spf(21); emojiTextSize = spf(33)
+            }
+            else -> {   // HEIGHT_DEFAULT — the LightOS baseline
                 padTop = dpf(8); padBottom = dpf(10); padSide = dpf(6)
                 keyGap = dpf(3); rowKeyH = dpf(48)
                 keyTextSize = spf(26); labelTextSize = spf(18); emojiTextSize = spf(30)

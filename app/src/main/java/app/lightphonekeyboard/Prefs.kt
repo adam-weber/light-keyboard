@@ -22,9 +22,11 @@ object Prefs {
     const val LAYOUT_QWERTZ = "qwertz"
 
     /** Keyboard height presets; the stored value of [keyHeight]. */
+    const val HEIGHT_SHORTEST = "shortest"
     const val HEIGHT_SHORT = "short"
-    const val HEIGHT_MEDIUM = "medium"
+    const val HEIGHT_DEFAULT = "default"
     const val HEIGHT_TALL = "tall"
+    const val HEIGHT_TALLEST = "tallest"
 
     private fun prefs(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -34,12 +36,15 @@ object Prefs {
     fun setAutocorrect(c: Context, value: Boolean) =
         prefs(c).edit().putBoolean(KEY_AUTOCORRECT, value).apply()
 
-    /** Keyboard height: one of [HEIGHT_SHORT] / [HEIGHT_MEDIUM] / [HEIGHT_TALL]. Defaults to Medium;
-     *  migrates the legacy Compact toggle (compact_mode = true) to Short. */
+    /** Keyboard height: SHORTEST / SHORT / DEFAULT / TALL / TALLEST. Defaults to Default; migrates the
+     *  legacy Compact toggle (compact_mode = true) to Shortest, and the old "medium" value to Default. */
     fun keyHeight(c: Context): String {
         val p = prefs(c)
-        return p.getString(KEY_HEIGHT, null)
-            ?: if (p.getBoolean(KEY_COMPACT, false)) HEIGHT_SHORT else HEIGHT_MEDIUM
+        return when (val stored = p.getString(KEY_HEIGHT, null)) {
+            null -> if (p.getBoolean(KEY_COMPACT, false)) HEIGHT_SHORTEST else HEIGHT_DEFAULT
+            "medium" -> HEIGHT_DEFAULT
+            else -> stored
+        }
     }
 
     fun setKeyHeight(c: Context, value: String) =

@@ -43,9 +43,11 @@ class KeyboardHeightActivity : AppCompatActivity() {
         )
         root.addView(label(getString(R.string.height_title), 28f, R.color.white))
 
+        option(root, pad, Prefs.HEIGHT_SHORTEST, getString(R.string.height_shortest))
         option(root, pad, Prefs.HEIGHT_SHORT, getString(R.string.height_short))
-        option(root, pad, Prefs.HEIGHT_MEDIUM, getString(R.string.height_medium))
+        option(root, pad, Prefs.HEIGHT_DEFAULT, getString(R.string.height_default))
         option(root, pad, Prefs.HEIGHT_TALL, getString(R.string.height_tall))
+        option(root, pad, Prefs.HEIGHT_TALLEST, getString(R.string.height_tallest))
         refreshChecks()
 
         setContentView(LightScrollView(this).apply {

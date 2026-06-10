@@ -16,9 +16,11 @@
     <string name="layout_title">Keyboard layout</string>
     <string name="layout_back">← Back</string>
     <string name="height_title">Keyboard height</string>
+    <string name="height_shortest">Shortest</string>
     <string name="height_short">Short</string>
-    <string name="height_medium">Medium</string>
+    <string name="height_default">Default</string>
     <string name="height_tall">Tall</string>
+    <string name="height_tallest">Tallest</string>
     <string name="setup_voice">Voice dictation</string>
     <string name="setup_voice_dl">(40MB download)</string>
     <string name="setup_voice_clear">Delete model</string>

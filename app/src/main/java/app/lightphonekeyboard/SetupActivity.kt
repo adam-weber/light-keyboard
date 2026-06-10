@@ -313,9 +313,11 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun heightName(key: String): String = when (key) {
+        Prefs.HEIGHT_SHORTEST -> getString(R.string.height_shortest)
         Prefs.HEIGHT_SHORT -> getString(R.string.height_short)
         Prefs.HEIGHT_TALL -> getString(R.string.height_tall)
-        else -> getString(R.string.height_medium)
+        Prefs.HEIGHT_TALLEST -> getString(R.string.height_tallest)
+        else -> getString(R.string.height_default)
     }
 
     private fun onVoiceToggle(on: Boolean) {
