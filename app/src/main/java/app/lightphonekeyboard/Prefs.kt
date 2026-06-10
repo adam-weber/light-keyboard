@@ -14,11 +14,17 @@ object Prefs {
     private const val KEY_EMOJI_KEY = "emoji_key"
     private const val KEY_TOUCH_OFFSETS = "touch_offsets"
     private const val KEY_LAYOUT = "key_layout"
+    private const val KEY_HEIGHT = "key_height"
 
     /** Keyboard letter arrangements; the stored value of [keyLayout]. */
     const val LAYOUT_QWERTY = "qwerty"
     const val LAYOUT_AZERTY = "azerty"
     const val LAYOUT_QWERTZ = "qwertz"
+
+    /** Keyboard height presets; the stored value of [keyHeight]. */
+    const val HEIGHT_SHORT = "short"
+    const val HEIGHT_MEDIUM = "medium"
+    const val HEIGHT_TALL = "tall"
 
     private fun prefs(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -28,11 +34,16 @@ object Prefs {
     fun setAutocorrect(c: Context, value: Boolean) =
         prefs(c).edit().putBoolean(KEY_AUTOCORRECT, value).apply()
 
-    /** Compact layout: tighter gutters and shorter keys, to reclaim screen space. Off by default. */
-    fun compactMode(c: Context): Boolean = prefs(c).getBoolean(KEY_COMPACT, false)
+    /** Keyboard height: one of [HEIGHT_SHORT] / [HEIGHT_MEDIUM] / [HEIGHT_TALL]. Defaults to Medium;
+     *  migrates the legacy Compact toggle (compact_mode = true) to Short. */
+    fun keyHeight(c: Context): String {
+        val p = prefs(c)
+        return p.getString(KEY_HEIGHT, null)
+            ?: if (p.getBoolean(KEY_COMPACT, false)) HEIGHT_SHORT else HEIGHT_MEDIUM
+    }
 
-    fun setCompactMode(c: Context, value: Boolean) =
-        prefs(c).edit().putBoolean(KEY_COMPACT, value).apply()
+    fun setKeyHeight(c: Context, value: String) =
+        prefs(c).edit().putString(KEY_HEIGHT, value).apply()
 
     /** Double-tap the space bar to insert ". " (period + space). On by default. */
     fun autoPeriod(c: Context): Boolean = prefs(c).getBoolean(KEY_AUTO_PERIOD, true)

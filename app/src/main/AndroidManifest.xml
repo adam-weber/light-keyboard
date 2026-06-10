@@ -44,7 +44,8 @@
         <activity
             android:name=".SetupActivity"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -54,6 +55,12 @@
         <!-- Keyboard layout picker (QWERTY / AZERTY / QWERTZ), opened from setup. -->
         <activity
             android:name=".KeyboardLayoutActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- Keyboard height picker (Short / Medium / Tall), opened from setup. -->
+        <activity
+            android:name=".KeyboardHeightActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
     </application>
