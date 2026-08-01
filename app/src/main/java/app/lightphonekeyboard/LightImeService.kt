@@ -219,13 +219,8 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
             }
         }
         clearUndo()
-        // Honor the field's action (Send/Search/Go); otherwise insert a newline.
-        val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION)
-        if (action != null && action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
-            ic.performEditorAction(action)
-        } else {
-            ic.commitText("\n", 1)
-        }
+        // Always insert a newline on the return key.
+        ic.commitText("\n", 1)
     }
 
     /** Auto-Period: a quick second space turns the trailing " " into ". " — but only after a letter
