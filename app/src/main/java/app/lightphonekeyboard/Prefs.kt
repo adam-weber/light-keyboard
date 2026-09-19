@@ -6,6 +6,7 @@ import android.content.Context
 object Prefs {
     private const val FILE = "light_keyboard_prefs"
     private const val KEY_AUTOCORRECT = "autocorrect"
+    private const val KEY_GLIDE = "glide_typing"
     private const val KEY_VOICE = "voice_enabled"
     private const val KEY_COMPACT = "compact_mode"
     private const val KEY_AUTO_PERIOD = "auto_period"
@@ -35,6 +36,12 @@ object Prefs {
 
     fun setAutocorrect(c: Context, value: Boolean) =
         prefs(c).edit().putBoolean(KEY_AUTOCORRECT, value).apply()
+
+    /** Swipe (glide) typing — draw through a word's letters to enter it. On by default. */
+    fun glideTyping(c: Context): Boolean = prefs(c).getBoolean(KEY_GLIDE, true)
+
+    fun setGlideTyping(c: Context, value: Boolean) =
+        prefs(c).edit().putBoolean(KEY_GLIDE, value).apply()
 
     /** Keyboard height: SHORTEST / SHORT / DEFAULT / TALL / TALLEST. Defaults to Default; migrates the
      *  legacy Compact toggle (compact_mode = true) to Shortest, and the old "medium" value to Default. */
