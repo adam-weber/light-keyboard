@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
+import android.text.InputType
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.textservice.SentenceSuggestionsInfo
@@ -61,7 +62,18 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
-        keyboard?.reset()
+        // Only re-initialise the keyboard surface for a genuinely new field. restarting == true is the
+        // SAME field reconnecting — many apps call restartInput() after each committed character — so
+        // resetting here would snap a user who switched to the numbers/symbols layer back to letters
+        // mid-typing (the reported "type one number and it jumps back to ABC" bug).
+        if (!restarting) {
+            // Number / phone / date fields open on the numbers layer; text fields on letters.
+            val cls = info?.inputType?.and(InputType.TYPE_MASK_CLASS) ?: 0
+            val numeric = cls == InputType.TYPE_CLASS_NUMBER ||
+                cls == InputType.TYPE_CLASS_PHONE ||
+                cls == InputType.TYPE_CLASS_DATETIME
+            keyboard?.reset(numeric)
+        }
         micActive = false
         dictation.destroy()
         corrections.clear()
@@ -207,13 +219,8 @@ class LightImeService : InputMethodService(), LightKeyboardView.Listener, SpellC
             }
         }
         clearUndo()
-        // Honor the field's action (Send/Search/Go); otherwise insert a newline.
-        val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION)
-        if (action != null && action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
-            ic.performEditorAction(action)
-        } else {
-            ic.commitText("\n", 1)
-        }
+        // Always insert a newline on the return key.
+        ic.commitText("\n", 1)
     }
 
     /** Auto-Period: a quick second space turns the trailing " " into ". " — but only after a letter

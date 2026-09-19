@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Light Keyboard</string>
+    <string name="setup_title">Light Keyboard</string>
+    <string name="setup_blurb">Een minimaal zwart-wit toetsenbord.</string>
+    <string name="setup_try">Probeer het toetsenbord hier…</string>
+    <string name="setup_step1">1. Schakel Light Keyboard in</string>
+    <string name="setup_step2">2. Kies het als je toetsenbord</string>
+    <string name="setup_autocorrect">Autocorrectie</string>
+    <string name="setup_autocap">Automatisch hoofdletters</string>
+    <string name="setup_autoperiod">Automatische punt</string>
+    <string name="setup_layout">Toetsenbordindeling</string>
+    <string name="setup_height">Toetsenbordhoogte</string>
+    <string name="setup_returnkey">Enter-toets</string>
+    <string name="setup_emojikey">Emoji-toetsenbord</string>
+    <string name="layout_title">Toetsenbordindeling</string>
+    <string name="layout_back">← Terug</string>
+    <string name="height_title">Toetsenbordhoogte</string>
+    <string name="height_shortest">Laagst</string>
+    <string name="height_short">Laag</string>
+    <string name="height_default">Standaard</string>
+    <string name="height_tall">Hoog</string>
+    <string name="height_tallest">Hoogst</string>
+    <string name="setup_voice">Spraakinvoer</string>
+    <string name="setup_voice_dl">(40MB download)</string>
+    <string name="setup_voice_clear">Model verwijderen</string>
+</resources>

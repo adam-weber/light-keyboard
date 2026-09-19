@@ -15,11 +15,19 @@ object Prefs {
     private const val KEY_EMOJI_KEY = "emoji_key"
     private const val KEY_TOUCH_OFFSETS = "touch_offsets"
     private const val KEY_LAYOUT = "key_layout"
+    private const val KEY_HEIGHT = "key_height"
 
     /** Keyboard letter arrangements; the stored value of [keyLayout]. */
     const val LAYOUT_QWERTY = "qwerty"
     const val LAYOUT_AZERTY = "azerty"
     const val LAYOUT_QWERTZ = "qwertz"
+
+    /** Keyboard height presets; the stored value of [keyHeight]. */
+    const val HEIGHT_SHORTEST = "shortest"
+    const val HEIGHT_SHORT = "short"
+    const val HEIGHT_DEFAULT = "default"
+    const val HEIGHT_TALL = "tall"
+    const val HEIGHT_TALLEST = "tallest"
 
     private fun prefs(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
@@ -35,11 +43,19 @@ object Prefs {
     fun setGlideTyping(c: Context, value: Boolean) =
         prefs(c).edit().putBoolean(KEY_GLIDE, value).apply()
 
-    /** Compact layout: tighter gutters and shorter keys, to reclaim screen space. Off by default. */
-    fun compactMode(c: Context): Boolean = prefs(c).getBoolean(KEY_COMPACT, false)
+    /** Keyboard height: SHORTEST / SHORT / DEFAULT / TALL / TALLEST. Defaults to Default; migrates the
+     *  legacy Compact toggle (compact_mode = true) to Shortest, and the old "medium" value to Default. */
+    fun keyHeight(c: Context): String {
+        val p = prefs(c)
+        return when (val stored = p.getString(KEY_HEIGHT, null)) {
+            null -> if (p.getBoolean(KEY_COMPACT, false)) HEIGHT_SHORTEST else HEIGHT_DEFAULT
+            "medium" -> HEIGHT_DEFAULT
+            else -> stored
+        }
+    }
 
-    fun setCompactMode(c: Context, value: Boolean) =
-        prefs(c).edit().putBoolean(KEY_COMPACT, value).apply()
+    fun setKeyHeight(c: Context, value: String) =
+        prefs(c).edit().putString(KEY_HEIGHT, value).apply()
 
     /** Double-tap the space bar to insert ". " (period + space). On by default. */
     fun autoPeriod(c: Context): Boolean = prefs(c).getBoolean(KEY_AUTO_PERIOD, true)
